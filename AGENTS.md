@@ -17,7 +17,7 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 - Everything pinned via [mise](https://mise.jdx.dev/) in `.config/mise.toml` (lockfile on): Go, `gopls`, `golangci-lint`.
 - Contributor bootstrap: `mise trust && mise install`. Do not rely on system Go.
 - Copilot CLI LSP: `.github/lsp.json` launches gopls via `mise exec -- gopls` so the mise-pinned version is used. Don't hardcode an absolute path.
-- Zed workspace LSP config in `.zed/settings.json` invokes `golangci-lint` through `mise exec` for the same reason; keep it committed.
+- Zed workspace LSP config in `.zed/settings.json` invokes `golangci-lint` through `mise exec` for the same reason; keep it committed. Because the lint config lives under `.config/`, keep `run.relative-path-mode: gomod` in `.config/golangci.yaml` so Zed diagnostics match Go file paths.
 
 ## Commands
 
