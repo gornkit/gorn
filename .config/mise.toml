@@ -1,0 +1,16 @@
+[settings]
+lockfile = true
+
+[tools]
+go = "latest"
+"go:golang.org/x/tools/gopls" = "latest"
+golangci-lint = "v2.12.2"
+
+[tasks.lint]
+run = "golangci-lint run --config ${MISE_PROJECT_ROOT}/.config/golangci.yaml ./..."
+
+[tasks.fmt]
+run = "golangci-lint fmt --config ${MISE_PROJECT_ROOT}/.config/golangci.yaml ./..."
+
+[tasks.fix]
+run = "golangci-lint run --fix --config ${MISE_PROJECT_ROOT}/.config/golangci.yaml ./..."

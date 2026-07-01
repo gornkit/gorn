@@ -1,0 +1,21 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - unconvert
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+issues:
+  max-same-issues: 50
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [errcheck, gosec]

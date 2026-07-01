@@ -1,0 +1,11 @@
+{
+  "lspServers": {
+    "gopls": {
+      "command": "mise",
+      "args": ["exec", "--", "gopls"],
+      "fileExtensions": {
+        ".go": "go"
+      }
+    }
+  }
+}
