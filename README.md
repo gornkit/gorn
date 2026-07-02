@@ -7,14 +7,32 @@
 
 ## Status
 
-Pre-alpha. The design is written; the runner is not. Nothing here builds
-into a usable tool yet. If you're looking for something to run, come back
-later.
+Pre-alpha. The `sh` package has a usable shell-exec v0; the runner is not
+usable yet.
+
+## `sh` package
+
+`github.com/gornkit/gorn/sh` runs shell snippets with normal Go IO and
+status-only results:
+
+```go
+sh.Host().Exec("go test ./...").OrExit()
+
+sh.Bash().
+	Strict().
+	Shell("go test ./...").
+	Env("CI", "1").
+	Exec().
+	OrExit()
+```
+
+It is shell-first, not a portable shell replacement. Structured commands,
+globbing, and file helpers are future work.
 
 ## Design
 
 - [`project/GORN_DESIGN.md`](project/GORN_DESIGN.md) — overall design and non-goals.
-- [`project/SH_PACKAGE_DESIGN.md`](project/SH_PACKAGE_DESIGN.md) — the `sh` helper package.
+- [`project/sh-package-design-v0.md`](project/sh-package-design-v0.md) — the `sh` helper package.
 - [`project/IMPLEMENTATION_PLAN.md`](project/IMPLEMENTATION_PLAN.md) — build order.
 
 ## Development

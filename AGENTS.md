@@ -5,11 +5,11 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 ## Layout
 
 - Root `package main` → `go install github.com/gornkit/gorn` installs the CLI as `gorn`.
-- `sh/` → library package, imported as `github.com/gornkit/gorn/sh`.
+- `sh/` → library package, imported as `github.com/gornkit/gorn/sh`. Current v0 is shell-exec only: `Host()/Bash()/Zsh()/Sh()/CmdExe()/Pwsh()`, `Setup()/Strict()/Shell()/Exec()`, command IO/env/dir, process `Wait()/Kill()`, and status-only `Result`.
 - The root is not importable as a library; consumers import subpackages.
 - `project/` holds the design docs. Read these before touching architecture:
   - `project/GORN_DESIGN.md` — overall design.
-  - `project/SH_PACKAGE_DESIGN.md` — `sh` package design.
+  - `project/sh-package-design-v0.md` — `sh` package design.
   - `project/IMPLEMENTATION_PLAN.md` — build order / status.
 
 ## Toolchain
@@ -22,7 +22,7 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 ## Commands
 
 - Build: `go build ./...`
-- Test all: `go test ./...`
+- Test all: `go test ./...` or `mise run test` for verbose uncached tests
 - Single test: `go test ./path/to/pkg -run TestName`
 - Vet: `go vet ./...`
 - Lint: `mise run lint` (config: `.config/golangci.yaml`, not auto-detected without `--config`)
