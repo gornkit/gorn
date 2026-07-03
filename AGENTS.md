@@ -7,10 +7,7 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 - Root `package main` → `go install github.com/gornkit/gorn` installs the CLI as `gorn`.
 - `sh/` → library package, imported as `github.com/gornkit/gorn/sh`. Current v0 is shell-exec only: `Host()/Bash()/Zsh()/Sh()/CmdExe()/Pwsh()`, `Setup()/Strict()/Shell()/Exec()`, command IO/env/dir, process `Wait()/Kill()`, and status-only `Result`.
 - The root is not importable as a library; consumers import subpackages.
-- `project/` holds the design docs. Read these before touching architecture:
-  - `project/GORN_DESIGN.md` — overall design.
-  - `project/sh-package-design-v0.md` — `sh` package design.
-  - `project/IMPLEMENTATION_PLAN.md` — build order / status.
+- `project/` holds historical/reference design docs. They are useful context, but the implementation and root docs are authoritative when they diverge.
 
 ## Toolchain
 
@@ -21,19 +18,20 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 
 ## Commands
 
-- Build: `go build ./...`
+- Build all packages: `go build ./...`
+- Build stamped CLI: `mise run build` (override with `GORN_VERSION=...`)
 - Test all: `go test ./...` or `mise run test` for verbose uncached tests
 - Single test: `go test ./path/to/pkg -run TestName`
 - Vet: `go vet ./...`
-- Lint: `mise run lint` (config: `.config/golangci.yaml`, not auto-detected without `--config`)
-- Format: `mise run fmt` (formatters only) or `mise run fix` (format + lint --fix)
+- Lint: `mise run lint:run` (config: `.config/golangci.yaml`, not auto-detected without `--config`)
+- Format: `mise run lint:fmt` (formatters only) or `mise run lint:fix` (format + lint --fix)
 
 Mise tasks are inline in `.config/mise.toml`. If you add more, either keep them inline or move to `.config/mise/tasks/` — don't mix.
 
 ## Conventions
 
 - Module path is `github.com/gornkit/gorn`; use it for internal imports.
-- No dependencies yet — prefer stdlib. Adding a dep needs justification.
+- CLI parsing uses `github.com/alexflint/go-arg`; otherwise prefer stdlib. Adding another dep needs justification.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc.). Prefer a single commit per logical change over splitting scaffolding into many small ones.
 - User style (`@trippwill`): buildable commits, small reviewable slices, no
   half-baked feature branches pushed. Pushing requires explicit sign-off.

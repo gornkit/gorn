@@ -6,14 +6,22 @@ go = "latest"
 "go:golang.org/x/tools/gopls" = "latest"
 golangci-lint = "v2.12.2"
 
-[tasks.lint]
+[tasks."lint:run"]
 run = "golangci-lint run --config ${MISE_PROJECT_ROOT}/.config/golangci.yaml ./..."
 
-[tasks.fmt]
+[tasks."lint:fmt"]
 run = "golangci-lint fmt --config ${MISE_PROJECT_ROOT}/.config/golangci.yaml ./..."
 
-[tasks.fix]
+[tasks."lint:fix"]
 run = "golangci-lint run --fix --config ${MISE_PROJECT_ROOT}/.config/golangci.yaml ./..."
 
 [tasks.test]
 run = "go test -v -count=1 ./..."
+depends = ["build"]
+
+[tasks.build]
+run = '''
+version="${GORN_VERSION:-$(git describe --tags --dirty --always 2>/dev/null || printf dev)}"
+go build -ldflags "-X main.Version=${version}" -o gorn .
+'''
+depends = ["lint:run"]

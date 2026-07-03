@@ -43,7 +43,17 @@ Dev environment is pinned with [mise](https://mise.jdx.dev/):
 mise trust && mise install
 ```
 
-See [`AGENTS.md`](AGENTS.md) for build/lint/test commands and conventions.
+See [`AGENTS.md`](./AGENTS.md) for build/lint/test commands and conventions.
+
+Current CLI skeleton:
+
+```sh
+gorn <script.go> [-- args...]      # shorthand for run
+gorn run <script.go> [-- args...]
+gorn build
+gorn cache
+gorn --version
+```
 
 ## License
 

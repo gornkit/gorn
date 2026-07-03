@@ -1,5 +1,2 @@
-words = [
-    "Exitf",
-    "bld",
-]
+words = ["Exitf", "bld", "gorn"]
 ignore_paths = [".config/golangci.yaml"]
