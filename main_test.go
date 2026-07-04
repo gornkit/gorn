@@ -65,6 +65,27 @@ func captureStdout(t *testing.T, out *bytes.Buffer) func() {
 	}
 }
 
+func withStdin(t *testing.T, content string) func() {
+	t.Helper()
+
+	old := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+
+	go func() {
+		_, _ = io.WriteString(w, content)
+		_ = w.Close()
+	}()
+
+	return func() {
+		os.Stdin = old
+		_ = r.Close()
+	}
+}
+
 func TestRunCLIVersion(t *testing.T) {
 	got := runCLIForTest(t, "--version")
 	if got.code != 0 {
@@ -100,8 +121,8 @@ func TestRunCLIHelp(t *testing.T) {
 }
 
 func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
-	explicit := runCLIForTest(t, "run", "main.go", "--", "--flag")
-	shorthand := runCLIForTest(t, "main.go", "--", "--flag")
+	explicit := runCLIForTest(t, "run", "testdata/sample.gorn", "--", "--flag")
+	shorthand := runCLIForTest(t, "testdata/sample.gorn", "--", "--flag")
 	if explicit.err != nil {
 		t.Fatal(explicit.err)
 	}
@@ -114,9 +135,9 @@ func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
 }
 
 func TestRunCLIGlobalVerboseAppliesToRunAndShorthand(t *testing.T) {
-	explicit := runCLIForTest(t, "--verbose", "run", "main.go")
-	shorthand := runCLIForTest(t, "--verbose", "main.go")
-	plain := runCLIForTest(t, "run", "main.go")
+	explicit := runCLIForTest(t, "--verbose", "run", "testdata/sample.gorn")
+	shorthand := runCLIForTest(t, "--verbose", "testdata/sample.gorn")
+	plain := runCLIForTest(t, "run", "testdata/sample.gorn")
 	if explicit.err != nil {
 		t.Fatal(explicit.err)
 	}
@@ -182,6 +203,9 @@ func TestRunCLIDoesNotFallbackForExplicitSubcommandErrors(t *testing.T) {
 }
 
 func TestRunCLIStdinShorthand(t *testing.T) {
+	cleanup := withStdin(t, "//gorn:main\nprintln(\"hi\")\n")
+	defer cleanup()
+
 	got := runCLIForTest(t, "-", "--", "--flag")
 	if got.err != nil {
 		t.Fatal(got.err)

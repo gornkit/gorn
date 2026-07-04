@@ -1,10 +1,14 @@
 #!/usr/bin/env gorn
 //gorn:go 1.26
+//gorn:module example.com/scripts/todo
 //gorn:require github.com/charmbracelet/lipgloss v1.1.0
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/gornkit/gorn/sh"
 )
 
 func hasTodo(path string) bool {
@@ -13,8 +17,10 @@ func hasTodo(path string) bool {
 
 //gorn:main
 
+style := lipgloss.NewStyle().Bold(true)
+
 for _, file := range sh.Glob("**/*.go") {
 	if hasTodo(file) {
-		fmt.Println(file)
+		fmt.Println(style.Render(file))
 	}
 }

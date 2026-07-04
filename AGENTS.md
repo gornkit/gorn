@@ -21,6 +21,7 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 - Build all packages: `go build ./...`
 - Build stamped CLI: `mise run build` (override with `GORN_VERSION=...`)
 - Test all: `go test ./...` or `mise run test` for verbose uncached tests
+  - `mise run test` depends on `build`, which depends on `lint:run` — so it's currently the most thorough single validation command (lint + build + test), not just a test runner.
 - Single test: `go test ./path/to/pkg -run TestName`
 - Vet: `go vet ./...`
 - Lint: `mise run lint:run` (config: `.config/golangci.yaml`, not auto-detected without `--config`)
