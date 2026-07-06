@@ -1,7 +1,6 @@
 package gornparser_test
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -34,11 +33,8 @@ func TestParseSourceParsesScriptMetadataAndSections(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if script.Path != "todo.gorn" {
-		t.Fatalf("Path = %q, want %q", script.Path, "todo.gorn")
-	}
-	if got := script.Source(); !bytes.Equal(got, source) {
-		t.Fatalf("Source() = %q, want original source", got)
+	if script.SourcePath != "todo.gorn" {
+		t.Fatalf("Path = %q, want %q", script.SourcePath, "todo.gorn")
 	}
 	if script.GoVersion != "1.26" {
 		t.Fatalf("GoVersion = %q, want 1.26", script.GoVersion)
@@ -68,12 +64,12 @@ func TestParseSourceParsesScriptMetadataAndSections(t *testing.T) {
 		"\treturn true\n" +
 		"}\n" +
 		"\n"
-	if got := joinLines(script.PackageLines); got != wantPackage {
+	if got := script.PackageContent; got != wantPackage {
 		t.Fatalf("PackageLines joined = %q, want %q", got, wantPackage)
 	}
 
 	wantMain := "fmt.Println(hasTodo(\"README.md\"))\n"
-	if got := joinLines(script.MainLines); got != wantMain {
+	if got := script.MainContent; got != wantMain {
 		t.Fatalf("MainLines joined = %q, want %q", got, wantMain)
 	}
 }
@@ -93,15 +89,16 @@ func TestParseSourceTracksSectionStartLines(t *testing.T) {
 	if script.PackageStart == nil || *script.PackageStart != 4 {
 		t.Fatalf("PackageStart = %v, want 4", intPtrValue(script.PackageStart))
 	}
-	if script.MainStart == nil || *script.MainStart != 6 {
-		t.Fatalf("MainStart = %v, want 6", intPtrValue(script.MainStart))
+	if script.MainStart != 6 {
+		t.Fatalf("MainStart = %d, want 6", script.MainStart)
 	}
 }
 
 // TestParseSourceDropsLeadingBlanksAfterMain locks in that blank lines
 // immediately after //gorn:main are dropped rather than preserved, keeping
-// MainStart aligned with MainLines[0]. Gorn never needs to reverse-generate
-// the original source, so this formatting trivia is intentionally lost.
+// MainStart aligned with the first main line. Gorn never needs to
+// reverse-generate the original source, so this formatting trivia is
+// intentionally lost.
 func TestParseSourceDropsLeadingBlanksAfterMain(t *testing.T) {
 	source := []byte("//gorn:main\n" +
 		"\n" +
@@ -112,29 +109,11 @@ func TestParseSourceDropsLeadingBlanksAfterMain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if script.MainStart == nil || *script.MainStart != 4 {
-		t.Fatalf("MainStart = %v, want 4", intPtrValue(script.MainStart))
+	if script.MainStart != 4 {
+		t.Fatalf("MainStart = %d, want 4", script.MainStart)
 	}
-	if got := joinLines(script.MainLines); got != "fmt.Println(\"hello\")\n" {
+	if got := script.MainContent; got != "fmt.Println(\"hello\")\n" {
 		t.Fatalf("MainLines joined = %q, want %q", got, "fmt.Println(\"hello\")\n")
-	}
-}
-
-func TestParseSourceReturnsSourceCopy(t *testing.T) {
-	source := []byte("//gorn:main\nprintln(\"hello\")\n")
-
-	script, err := gornparser.ParseSource("hello.gorn", source)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := script.Source()
-	got[0] = '#'
-	if bytes.Equal(script.Source(), got) {
-		t.Fatal("Source() returned mutable parser storage, want copy")
-	}
-	if !bytes.Equal(script.Source(), source) {
-		t.Fatalf("Source() = %q, want original source", script.Source())
 	}
 }
 
@@ -148,7 +127,7 @@ func TestParseSourceAllowsShebangOnlyOnFirstLine(t *testing.T) {
 	}
 
 	want := "#! this is main source, not a shebang\n"
-	if got := joinLines(script.MainLines); got != want {
+	if got := script.MainContent; got != want {
 		t.Fatalf("MainLines joined = %q, want %q", got, want)
 	}
 }
@@ -290,6 +269,31 @@ func TestParseSourceAllowsMultipleRequireDirectives(t *testing.T) {
 // so they don't block a following directive. Once real content appears,
 // the zone still closes permanently: a directive after that must still be
 // rejected, even if more blank lines follow.
+func TestParseSourceParsesPreambleDirective(t *testing.T) {
+	source := []byte("//gorn:preamble\n" +
+		"//gorn:main\n" +
+		"println(\"hi\")\n")
+
+	script, err := gornparser.ParseSource("preamble.gorn", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !script.UsePreamble {
+		t.Fatal("UsePreamble = false, want true")
+	}
+}
+
+func TestParseSourceRejectsPreambleWithArgs(t *testing.T) {
+	source := []byte("//gorn:preamble extra\n" +
+		"//gorn:main\n" +
+		"println(\"hi\")\n")
+
+	_, err := gornparser.ParseSource("preamble.gorn", source)
+	if !errors.Is(err, gornparser.ErrInvalidDirective) {
+		t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrInvalidDirective)
+	}
+}
+
 func TestParseSourceAllowsBlankLinesBetweenDirectives(t *testing.T) {
 	source := []byte("\n" +
 		"//gorn:go 1.26\n" +
@@ -313,7 +317,7 @@ func TestParseSourceAllowsBlankLinesBetweenDirectives(t *testing.T) {
 	if script.PackageStart == nil || *script.PackageStart != 6 {
 		t.Fatalf("PackageStart = %v, want 6", intPtrValue(script.PackageStart))
 	}
-	if got := joinLines(script.PackageLines); got != "import \"fmt\"\n" {
+	if got := script.PackageContent; got != "import \"fmt\"\n" {
 		t.Fatalf("PackageLines joined = %q, want %q", got, "import \"fmt\"\n")
 	}
 }
@@ -379,11 +383,8 @@ func TestParseFileReadsPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if script.Path != path {
-		t.Fatalf("Path = %q, want %q", script.Path, path)
-	}
-	if got := script.Source(); !bytes.Equal(got, source) {
-		t.Fatalf("Source() = %q, want %q", got, source)
+	if script.SourcePath != path {
+		t.Fatalf("Path = %q, want %q", script.SourcePath, path)
 	}
 }
 
@@ -392,10 +393,6 @@ func TestParseFileReportsReadErrors(t *testing.T) {
 	if !errors.Is(err, gornparser.ErrFailedToReadFile) {
 		t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrFailedToReadFile)
 	}
-}
-
-func joinLines(lines [][]byte) string {
-	return string(bytes.Join(lines, nil))
 }
 
 func intPtrValue(p *int) any {

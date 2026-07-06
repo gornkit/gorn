@@ -121,8 +121,8 @@ func TestRunCLIHelp(t *testing.T) {
 }
 
 func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
-	explicit := runCLIForTest(t, "run", "testdata/sample.gorn", "--", "--flag")
-	shorthand := runCLIForTest(t, "testdata/sample.gorn", "--", "--flag")
+	explicit := runCLIForTest(t, "run", "testdata/clean.gorn", "--", "--flag")
+	shorthand := runCLIForTest(t, "testdata/clean.gorn", "--", "--flag")
 	if explicit.err != nil {
 		t.Fatal(explicit.err)
 	}
@@ -135,9 +135,9 @@ func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
 }
 
 func TestRunCLIGlobalVerboseAppliesToRunAndShorthand(t *testing.T) {
-	explicit := runCLIForTest(t, "--verbose", "run", "testdata/sample.gorn")
-	shorthand := runCLIForTest(t, "--verbose", "testdata/sample.gorn")
-	plain := runCLIForTest(t, "run", "testdata/sample.gorn")
+	explicit := runCLIForTest(t, "--verbose", "run", "testdata/clean.gorn")
+	shorthand := runCLIForTest(t, "--verbose", "testdata/clean.gorn")
+	plain := runCLIForTest(t, "run", "testdata/clean.gorn")
 	if explicit.err != nil {
 		t.Fatal(explicit.err)
 	}

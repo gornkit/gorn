@@ -24,6 +24,8 @@
   },
   "languages": {
     "Go": {
+      "colorize_brackets": true,
+      "line_ending": "prefer_lf",
       "language_servers": ["gopls", "golangci-lint"],
     },
   },

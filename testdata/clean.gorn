@@ -1,0 +1,21 @@
+#!/usr/bin/env gorn
+//gorn:go 1.26
+//gorn:module example.com/scripts/todo
+//gorn:require github.com/charmbracelet/lipgloss v1.1.0
+//gorn:preamble
+
+import	"github.com/charmbracelet/lipgloss"
+
+func hasTodo(path string) bool {
+	return strings.Contains(sh.MustRead(path), "TODO")
+}
+
+//gorn:main
+
+style := lipgloss.NewStyle().Bold(true)
+
+for _, file := range sh.Glob("**/*.go") {
+	if hasTodo(file) {
+		fmt.Println(style.Render(file))
+	}
+}

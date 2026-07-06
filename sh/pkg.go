@@ -5,6 +5,11 @@ import (
 	"os"
 )
 
+// PreambleSentinel is used to ensure the import of the sh package
+// remains seen by the Go compiler for generated gorn scripts.
+// It is always true.
+const PreambleSentinel bool = true
+
 // OrExit exits with status 1 if err is non-nil.
 func OrExit(err error) {
 	if err != nil {

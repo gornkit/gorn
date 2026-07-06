@@ -33,6 +33,8 @@ Mise tasks are inline in `.config/mise.toml`. If you add more, either keep them 
 
 - Module path is `github.com/gornkit/gorn`; use it for internal imports.
 - CLI parsing uses `github.com/alexflint/go-arg`; otherwise prefer stdlib. Adding another dep needs justification.
+- **Invariant: the `sh` package must remain stdlib-only** — no third-party dependencies. Generated scripts and external users import `sh`, so its dependency graph must stay clean and it must be self-contained (also enables writing a local copy for generated modules).
+- **Invariant: the CLI (root/`pkg/`) must not import `sh`.** They are independent; the CLI only references `sh` by import-path string when generating scripts. Keep them decoupled.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc.). Prefer a single commit per logical change over splitting scaffolding into many small ones.
 - User style (`@trippwill`): buildable commits, small reviewable slices, no
   half-baked feature branches pushed. Pushing requires explicit sign-off.

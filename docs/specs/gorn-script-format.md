@@ -1,16 +1,17 @@
 # Gorn Script Format Specification
 
-Status: reflects the current implementation in [`pkg/gornparser`](../../pkg/gornparser/parser.go), which is fully tested.
+Status: reflects the current implementation in [`pkg/gornparser`](../../pkg/gornparser/) (`parser.go` and `generator.go`), which is tested.
 Where this spec and [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md) diverge, this document and the implementation are authoritative — `project/` holds historical/reference design notes only.
 
 ## Implementation status
 
 Read this section first; it sets expectations for the rest of the document.
 
-- **Implemented and tested:** the `.gorn` source file format described below — shebang handling, directives, the package/main split, and every error condition — is fully implemented and covered by tests in `pkg/gornparser`.
-- **Not yet implemented:** code generation, the build pipeline, and script execution. `gorn run <script>` currently parses its CLI arguments but does not invoke the parser, generate Go code, or execute the script — it only prints the resolved script path and arguments (see `pkg/app/runcmd.go`). `gorn build` and `gorn cache` are unimplemented stubs. `gorn eject`, fragments/includes (`.gfrag`), and directives such as `//gorn:replace`, `//gorn:fragment`, `//gorn:include`, and `//gorn:prelude` do not exist yet.
+- **Implemented and tested:** the `.gorn` source file format below (shebang, directives, the package/main split, every parse error) plus **code generation** — turning a parsed `Script` into a `go.mod` and a formatted `main.go`. Both live in `pkg/gornparser` and are covered by tests, including a test that compiles generated output.
+- **Wired into the CLI, partially:** `gorn run <script>` parses the script and dumps the parsed `Script`; with `--print-gen` it also generates and prints the `go.mod` and `main.go`. It does **not** yet build or execute the generated module.
+- **Not yet implemented:** the build/run pipeline (compiling and running generated code), `gorn build`/`gorn cache` (stubs returning "not implemented"), `gorn eject`, fragments/includes (`.gfrag`), and directives such as `//gorn:replace`, `//gorn:fragment`, `//gorn:include`.
 
-In short: this spec defines the file format Gorn already understands and validates. It does not yet describe a runnable system end to end.
+In short: Gorn can parse a `.gorn` file and generate the Go module for it, but does not yet compile or run that module.
 
 ## Overview
 
@@ -53,6 +54,7 @@ Directive arguments are split on whitespace (`bytes.Fields`); there is no quotin
 | `//gorn:go` | `//gorn:go <version>` | at most once | Sets `Script.GoVersion`. The version token is stored as-is; it is not validated against real Go release versions at parse time. |
 | `//gorn:module` | `//gorn:module <module-path>` | at most once | Sets `Script.Module`. The path token is stored as-is; it is not validated as a real module path at parse time. |
 | `//gorn:require` | `//gorn:require <module-path> <version>` | any number of times | Appends to `Script.Requires`. `latest` is rejected as a version — an explicit version is always required. |
+| `//gorn:preamble` | `//gorn:preamble` | at most once | Opts the script into ambient stdlib imports (see [Preamble](#preamble)). Takes no arguments. |
 | `//gorn:main` | `//gorn:main` | exactly once | Marks the package/main boundary. Required in every script. |
 
 ### Directive placement rules
@@ -79,7 +81,7 @@ Directive arguments are split on whitespace (`bytes.Fields`); there is no quotin
 
 ## Package section
 
-The package section holds ordinary Go: `import` blocks, `func`/`type`/`var`/`const` declarations, and comments. Gorn does not parse or validate Go syntax itself; it only slices out the raw lines. Syntactic and semantic correctness of the Go code is a build-time concern (not yet implemented).
+The package section holds ordinary Go: `import` blocks, `func`/`type`/`var`/`const` declarations, and comments. Gorn does not parse or validate arbitrary Go syntax itself; it slices out the raw lines and lets the Go toolchain judge correctness when the generated module is built. (The one exception is [preamble](#preamble) conflict detection, which inspects imports.)
 
 Leading blank lines before the first real package-section line are dropped entirely and are not part of the recorded package section, for the same reason directives may follow blank spacing: there is nothing meaningful to anchor a line-number reference to.
 
@@ -93,23 +95,46 @@ The main section holds ordinary Go statements, conceptually forming the body of 
 - Leading blank lines immediately after `//gorn:main` are dropped, not preserved — Gorn never needs to reconstruct the original source byte-for-byte, so this formatting detail is intentionally lost.
 - No directives are permitted anywhere in the main section.
 
+## Preamble
+
+`//gorn:preamble` opts a script into a small, fixed set of **ambient imports**: the generated `main.go` imports them and keeps them alive, so the script may use these packages without writing the imports itself. It is opt-in precisely because ambient imports are non-obvious; scripts that don't use the directive behave like ordinary Go (write your own imports).
+
+The preamble set (stdlib plus gorn's own `sh`):
+
+| Import path | Made available as |
+|---|---|
+| `fmt` | `fmt` |
+| `os` | `os` |
+| `path/filepath` | `filepath` |
+| `strconv` | `strconv` |
+| `strings` | `strings` |
+| `time` | `time` |
+| `github.com/gornkit/gorn/sh` | `sh` |
+
+Rules and caveats:
+
+- **Don't also import a preamble package.** In a preamble script, importing any package whose path is in the set above is an error (`ErrPreambleImportConflict`), reported at the offending import's original source line. Detection is by import **path**, so an aliased import (e.g. `import f "fmt"`) is flagged too — the package is already provided, aliased or not.
+- **Only these packages are ambient.** Anything else — including other stdlib packages and all `//gorn:require` dependencies — must still be imported explicitly.
+- **Shadowing disables the ambient import in scope.** Declaring a local identifier named after a preamble package (e.g. a variable `strings`) shadows the import for that scope, as in ordinary Go. Rare, but worth knowing since the import is invisible in the source.
+
 ## Errors
 
-`ParseSource`/`ParseFile` return a `*gornparser.Error` wrapping one of these sentinels, with the 1-based source line where the problem was detected (`errors.Is`/`errors.As` both work against the returned error):
+Parsing (`ParseSource`/`ParseFile`) returns a `*gornparser.Error` wrapping one of the sentinels below, carrying the 1-based source line where the problem was detected. Generation (`Generate`) returns a `*gornparser.GenerateError`; for a preamble conflict it wraps a line-carrying `*Error`, and for a formatting failure it carries the raw unformatted output in `Raw`. `errors.Is` and `errors.As` work against all of these.
 
-| Error | Meaning | Example |
-|---|---|---|
-| `ErrFailedToReadFile` | `ParseFile` could not read the file from disk. | Path does not exist. |
-| `ErrEmptyScript` | The source is zero-length. | `""` |
-| `ErrMissingMain` | No `//gorn:main` directive was found anywhere in the file. | `import "fmt"\n` |
-| `ErrMultipleMain` | More than one `//gorn:main` directive. | `//gorn:main\nx()\n//gorn:main\n` |
-| `ErrDirectiveAfterMain` | A `//gorn:` directive appears after `//gorn:main`. | `//gorn:main\n//gorn:go 1.26\n` |
-| `ErrDirectiveAfterPackage` | A directive appears after real package-section content has already started. | `import "fmt"\n//gorn:require x v1\n//gorn:main\n` |
-| `ErrInvalidDirective` | Unknown directive name, or wrong argument count for `go`/`module`, or an empty directive. | `//gorn:unknown value\n` |
-| `ErrInvalidRequire` | `//gorn:require` with the wrong argument count, or a `latest` version. | `//gorn:require github.com/example/tool\n` or `... latest` |
-| `ErrDuplicateGo` | A second `//gorn:go` directive. | `//gorn:go 1.26\n//gorn:go 1.27\n` |
-| `ErrDuplicateModule` | A second `//gorn:module` directive. | `//gorn:module a\n//gorn:module b\n` |
-| `ErrEmptyMain` | The main section has no non-blank content. | `//gorn:main\n` (nothing after it) |
+| Error | Raised by | Meaning | Example |
+|---|---|---|---|
+| `ErrFailedToReadFile` | parse | `ParseFile` could not read the file from disk. | Path does not exist. |
+| `ErrEmptyScript` | parse | The source is zero-length. | `""` |
+| `ErrMissingMain` | parse | No `//gorn:main` directive found. | `import "fmt"\n` |
+| `ErrMultipleMain` | parse | More than one `//gorn:main` directive. | `//gorn:main\nx()\n//gorn:main\n` |
+| `ErrDirectiveAfterMain` | parse | A `//gorn:` directive appears after `//gorn:main`. | `//gorn:main\n//gorn:go 1.26\n` |
+| `ErrDirectiveAfterPackage` | parse | A directive appears after real package-section content started. | `import "fmt"\n//gorn:require x v1\n//gorn:main\n` |
+| `ErrInvalidDirective` | parse | Unknown directive, wrong arg count for `go`/`module`/`preamble`, or an empty directive. | `//gorn:unknown value\n` |
+| `ErrInvalidRequire` | parse | `//gorn:require` with the wrong argument count, or a `latest` version. | `//gorn:require github.com/example/tool\n` |
+| `ErrDuplicateGo` | parse | A second `//gorn:go` directive. | `//gorn:go 1.26\n//gorn:go 1.27\n` |
+| `ErrDuplicateModule` | parse | A second `//gorn:module` directive. | `//gorn:module a\n//gorn:module b\n` |
+| `ErrEmptyMain` | parse | The main section has no non-blank content. | `//gorn:main\n` (nothing after it) |
+| `ErrPreambleImportConflict` | generate | A preamble script imports a preamble package itself. | `//gorn:preamble` + `import "fmt"` |
 
 ## Examples
 
@@ -157,7 +182,37 @@ for _, file := range sh.Glob("**/*.go") {
 }
 ```
 
-Note: the `sh` import above uses the real current module path (`github.com/gornkit/gorn/sh`). Once a code generator exists, it may auto-inject this import so scripts don't have to write it themselves — see [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md) for that (unimplemented) design intent. Today, the parser has no opinion on imports at all; it only slices lines.
+Note: the `sh` import uses the real current module path (`github.com/gornkit/gorn/sh`). This example imports everything explicitly; the [preamble](#preamble) example below shows how `//gorn:preamble` lets a script drop the `fmt`, `strings`, and `sh` imports.
+
+### Script using the preamble
+
+With `//gorn:preamble`, the `fmt`, `strings`, and `sh` imports become ambient and must not be written explicitly. Only the non-preamble dependency (`lipgloss`) is imported:
+
+```gorn
+#!/usr/bin/env gorn
+//gorn:go 1.26
+//gorn:module example.com/scripts/todo
+//gorn:require github.com/charmbracelet/lipgloss v1.1.0
+//gorn:preamble
+
+import "github.com/charmbracelet/lipgloss"
+
+func hasTodo(path string) bool {
+	return strings.Contains(sh.MustRead(path), "TODO")
+}
+
+//gorn:main
+
+style := lipgloss.NewStyle().Bold(true)
+
+for _, file := range sh.Glob("**/*.go") {
+	if hasTodo(file) {
+		fmt.Println(style.Render(file))
+	}
+}
+```
+
+Adding `import "fmt"` to this script would fail with `ErrPreambleImportConflict` — `fmt` is already provided by the preamble.
 
 ### Script with no package section
 
@@ -189,17 +244,18 @@ Fails with `ErrEmptyMain` at line 1 — there is nothing to run.
 
 ## For tool authors: line-number tracking
 
-`Script.PackageStart`/`Script.MainStart` record the 1-based source line of the first line in `Script.PackageLines`/`Script.MainLines`, respectively. Both slices are guaranteed contiguous runs of the original source (no gaps from filtered-out directive or leading-blank lines), so a single `//line <path>:<N>` directive at `PackageStart`/`MainStart`, followed by emitting the corresponding lines verbatim, is sufficient to map generated-code compiler errors back to the original `.gorn` source — no per-line tracking is needed. See the doc comments on `Script` in `pkg/gornparser/parser.go` for the exact contiguity guarantees.
+`Script.PackageStart`/`Script.MainStart` record the 1-based source line of the first line in `Script.PackageContent`/`Script.MainContent`, respectively. Both are contiguous runs of the original source (no gaps from filtered-out directive or leading-blank lines), so a single `//line <path>:<N>` directive at `PackageStart`/`MainStart`, followed by emitting the corresponding content verbatim, maps generated-code compiler errors back to the original `.gorn` source — no per-line tracking needed. This is exactly what the generator's `main.gotmpl` template does.
+
+`MainStart` is a plain `int` and is always ≥ 1 on a successful parse (an empty main section is rejected with `ErrEmptyMain`). `PackageStart` is a `*int`, nil when the script has no non-blank package-section content. See the doc comments on `Script` in `pkg/gornparser/parser.go` for the exact guarantees.
 
 ## Not yet implemented
 
-The following are part of the longer-term design (see [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md)) but do not exist in the parser, CLI, or anywhere else in the codebase today:
+The following are part of the longer-term design (see [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md)) but do not exist in the codebase today:
 
-- Code generation from a parsed `Script` into a runnable Go module.
-- The `gorn build`/`gorn cache` commands (currently stub implementations that return "not implemented").
-- Actually executing a script via `gorn run`/`gorn <script>` (currently prints the script path and arguments only).
+- Building and running the generated module — `gorn run` generates (with `--print-gen`) but does not compile or execute.
+- The `gorn build`/`gorn cache` commands (currently stubs returning "not implemented").
 - `gorn eject` — converting a `.gorn` file into a normal Go module.
-- Fragments/includes (`.gfrag` files) and their associated directives (`//gorn:fragment`, `//gorn:include`, `//gorn:prelude`).
+- Fragments/includes (`.gfrag` files) and their directives (`//gorn:fragment`, `//gorn:include`).
 - `//gorn:replace`.
 - Build caching semantics and cache invalidation.
 

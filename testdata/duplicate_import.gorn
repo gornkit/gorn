@@ -2,13 +2,11 @@
 //gorn:go 1.26
 //gorn:module example.com/scripts/todo
 //gorn:require github.com/charmbracelet/lipgloss v1.1.0
+//gorn:preamble
 
-import (
-	"fmt"
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-	"github.com/gornkit/gorn/sh"
+import	(
+  "fmt"
+  "github.com/charmbracelet/lipgloss"
 )
 
 func hasTodo(path string) bool {

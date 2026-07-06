@@ -1,7 +1,7 @@
 package app
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -30,6 +30,27 @@ func RunCmd(o RunOpts) error {
 
 	dumpScript(script)
 
+	if o.PrintGen {
+		gen, err := gornparser.Generate(script)
+		if err != nil {
+			// A format failure carries the raw, unformatted main file; dump
+			// it for debugging before surfacing the error.
+			var genErr *gornparser.GenerateError
+			if errors.As(err, &genErr) && genErr.Raw != nil {
+				fmt.Println("--- generated main file (unformatted) ---")
+				fmt.Print(string(genErr.Raw))
+			}
+			return fmt.Errorf("generate: %w", err)
+		}
+
+		fmt.Println("--- generated mod file ---")
+		fmt.Print(string(gen.ModGenerated))
+		fmt.Println("--- generated main file (unformatted) ---")
+		fmt.Print(string(gen.MainGenerated))
+		fmt.Println("--- generated main file ---")
+		fmt.Print(string(gen.MainFileFormatted))
+	}
+
 	return nil
 }
 
@@ -50,16 +71,16 @@ func parseScript(path string) (*gornparser.Script, error) {
 // until a real code generator exists to actually do something with it.
 func dumpScript(s *gornparser.Script) {
 	fmt.Println("--- parsed script ---")
-	fmt.Printf("Path:         %s\n", s.Path)
+	fmt.Printf("Path:         %s\n", s.SourcePath)
 	fmt.Printf("GoVersion:    %q\n", s.GoVersion)
 	fmt.Printf("Module:       %q\n", s.Module)
 	fmt.Printf("Requires:     %+v\n", s.Requires)
 	fmt.Printf("PackageStart: %s\n", intPtrString(s.PackageStart))
-	fmt.Printf("MainStart:    %s\n", intPtrString(s.MainStart))
+	fmt.Printf("MainStart:    %d\n", s.MainStart)
 	fmt.Println("--- PackageLines ---")
-	fmt.Print(string(bytes.Join(s.PackageLines, nil)))
+	fmt.Println(s.PackageContent)
 	fmt.Println("--- MainLines ---")
-	fmt.Print(string(bytes.Join(s.MainLines, nil)))
+	fmt.Println(s.MainContent)
 	fmt.Println("--- end ---")
 }
 

@@ -2,6 +2,8 @@ package gornparser
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,17 +13,18 @@ import (
 type ParserError string
 
 const (
-	ErrFailedToReadFile      ParserError = "failed to read file"
-	ErrEmptyScript           ParserError = "empty script"
-	ErrMissingMain           ParserError = "missing //gorn:main directive"
-	ErrMultipleMain          ParserError = "multiple //gorn:main directives"
-	ErrDirectiveAfterMain    ParserError = "gorn directive after //gorn:main"
-	ErrDirectiveAfterPackage ParserError = "gorn directive after package section content has started"
-	ErrInvalidDirective      ParserError = "invalid gorn directive"
-	ErrInvalidRequire        ParserError = "invalid //gorn:require directive"
-	ErrDuplicateGo           ParserError = "duplicate //gorn:go directive"
-	ErrDuplicateModule       ParserError = "duplicate //gorn:module directive"
-	ErrEmptyMain             ParserError = "empty //gorn:main section"
+	ErrFailedToReadFile       ParserError = "failed to read file"
+	ErrEmptyScript            ParserError = "empty script"
+	ErrMissingMain            ParserError = "missing //gorn:main directive"
+	ErrMultipleMain           ParserError = "multiple //gorn:main directives"
+	ErrDirectiveAfterMain     ParserError = "gorn directive after //gorn:main"
+	ErrDirectiveAfterPackage  ParserError = "gorn directive after package section content has started"
+	ErrInvalidDirective       ParserError = "invalid gorn directive"
+	ErrInvalidRequire         ParserError = "invalid //gorn:require directive"
+	ErrDuplicateGo            ParserError = "duplicate //gorn:go directive"
+	ErrDuplicateModule        ParserError = "duplicate //gorn:module directive"
+	ErrEmptyMain              ParserError = "empty //gorn:main section"
+	ErrPreambleImportConflict ParserError = "import conflicts with //gorn:preamble package"
 )
 
 func (e ParserError) Error() string { return string(e) }
@@ -42,35 +45,37 @@ func lineError(line int, err error) *Error {
 }
 
 // Script is the parsed representation of a .gorn source file.
-//
-// PackageLines and MainLines are subslices of the original source bytes
-// (not copies), to avoid duplicating the file contents in memory. Because
-// of this aliasing, Script and its fields must not be mutated after
-// ParseSource/ParseFile returns; doing so may corrupt the retained source
-// data. Use Source() if a caller needs an independent, mutable copy.
 type Script struct {
-	source    []byte
-	Path      string
-	GoVersion string
-	Module    string
-	Requires  []Require
+	// SourcePath is the path passed to ParseFile/ParseSource ("-" for stdin).
+	SourcePath string
 
-	// PackageLines holds the raw lines (including line terminators) that
+	// SourceHash is the hex-encoded SHA-256 of the full original source
+	// (64 characters). SourceHashShort is its first 8 characters, used to
+	// derive a stable default module path when a script omits //gorn:module.
+	SourceHash      string
+	SourceHashShort string
+
+	GoVersion   string
+	Module      string
+	Requires    []Require
+	UsePreamble bool
+
+	// PackageContent holds the raw lines (including line terminators) that
 	// make up the package section: everything before //gorn:main, minus
 	// directive lines and the optional line-1 shebang. Directives are
-	// only permitted before any package-section content, so PackageLines
-	// is guaranteed to be a contiguous run of the original source lines
-	// (no gaps) — this makes PackageStart sufficient as a single //line
-	// anchor when generating Go code.
-	PackageLines [][]byte
+	// only permitted before any package-section content, so PackageContent
+	// is a contiguous run of the original source lines (no gaps) — this
+	// makes PackageStart sufficient as a single //line anchor when
+	// generating Go code.
+	PackageContent string
 
-	// MainLines holds the raw lines (including line terminators) that make
+	// MainContent holds the raw lines (including line terminators) that make
 	// up the main section: every line after //gorn:main, except leading
 	// blank lines immediately following the directive, which are dropped
 	// (Gorn never needs to reverse-generate the original source, so this
-	// trivia isn't preserved). MainLines[0] always corresponds to the
-	// source line at MainStart.
-	MainLines [][]byte
+	// trivia isn't preserved). Its first line corresponds to the source
+	// line recorded in MainStart.
+	MainContent string
 
 	// PackageStart is the 1-based line number of the first non-blank
 	// package-section line. Leading blank lines (including any that
@@ -84,17 +89,9 @@ type Script struct {
 	// MainStart is the 1-based line number of the first non-blank line
 	// after //gorn:main. A script whose main section has no non-blank
 	// content (e.g. //gorn:main is the last line, or only blank lines
-	// follow it) is rejected with ErrEmptyMain, so MainStart is never
-	// nil on a successful parse.
-	MainStart *int
-}
-
-// Source returns a copy of the original source code of the script.
-func (s *Script) Source() []byte {
-	// return a copy
-	out := make([]byte, len(s.source))
-	copy(out, s.source)
-	return out
+	// follow it) is rejected with ErrEmptyMain, so MainStart is always
+	// a valid line (never 0) on a successful parse.
+	MainStart int
 }
 
 type Require struct {
@@ -106,6 +103,8 @@ type state struct {
 	seenMain          bool
 	mainDirectiveLine int
 	currLine          int
+	mainBuilder       strings.Builder
+	packageBuilder    strings.Builder
 	script            *Script
 }
 
@@ -123,10 +122,13 @@ func ParseSource(path string, source []byte) (*Script, error) {
 		return nil, ErrEmptyScript
 	}
 
+	sourceHashBytes := sha256.Sum256(source)
+	sourceHash := hex.EncodeToString(sourceHashBytes[:])
 	state := &state{
 		script: &Script{
-			source: source,
-			Path:   path,
+			SourcePath:      path,
+			SourceHash:      sourceHash,
+			SourceHashShort: sourceHash[:8],
 		},
 	}
 
@@ -183,14 +185,14 @@ func ParseSource(path string, source []byte) (*Script, error) {
 			// content worth generating or anchoring a //line marker to.
 			// Gorn never needs to reverse-generate the original source, so
 			// they are dropped entirely rather than preserved, keeping
-			// MainStart aligned with MainLines[0].
-			if state.script.MainStart == nil && len(trimmed) == 0 {
+			// MainStart aligned with the first main line.
+			if state.script.MainStart == 0 && len(trimmed) == 0 {
 				continue
 			}
-			if state.script.MainStart == nil {
-				state.script.MainStart = new(state.currLine)
+			if state.script.MainStart == 0 {
+				state.script.MainStart = state.currLine
 			}
-			state.script.MainLines = append(state.script.MainLines, line)
+			state.mainBuilder.Write(line)
 		} else {
 			// Leading blank lines carry no content worth anchoring a //line
 			// marker to, and including them would let a following directive
@@ -202,7 +204,7 @@ func ParseSource(path string, source []byte) (*Script, error) {
 			if state.script.PackageStart == nil {
 				state.script.PackageStart = new(state.currLine)
 			}
-			state.script.PackageLines = append(state.script.PackageLines, line)
+			state.packageBuilder.Write(line)
 		}
 
 		continue
@@ -211,10 +213,12 @@ func ParseSource(path string, source []byte) (*Script, error) {
 	if !state.seenMain {
 		return nil, lineError(state.currLine, ErrMissingMain)
 	}
-	if state.script.MainStart == nil {
+	if state.script.MainStart == 0 {
 		return nil, lineError(state.mainDirectiveLine, ErrEmptyMain)
 	}
 
+	state.script.MainContent = state.mainBuilder.String()
+	state.script.PackageContent = state.packageBuilder.String()
 	return state.script, nil
 }
 
@@ -254,6 +258,12 @@ func (s *state) applyDirective(directive []byte) error {
 			Path:    string(parts[1]),
 			Version: string(parts[2]),
 		})
+		return nil
+	case "preamble":
+		if len(parts) != 1 {
+			return ErrInvalidDirective
+		}
+		s.script.UsePreamble = true
 		return nil
 	}
 

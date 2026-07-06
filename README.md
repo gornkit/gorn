@@ -31,9 +31,10 @@ globbing, and file helpers are future work.
 
 ## Design
 
-- [`project/GORN_DESIGN.md`](project/GORN_DESIGN.md) — overall design and non-goals.
-- [`project/sh-package-design-v0.md`](project/sh-package-design-v0.md) — the `sh` helper package.
-- [`project/IMPLEMENTATION_PLAN.md`](project/IMPLEMENTATION_PLAN.md) — build order.
+- [`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) — the `.gorn` script format, as currently implemented (authoritative).
+- [`project/GORN_DESIGN.md`](project/GORN_DESIGN.md) — overall design and non-goals (historical/reference).
+- [`project/sh-package-design-v0.md`](project/sh-package-design-v0.md) — the `sh` helper package (historical/reference).
+- [`project/IMPLEMENTATION_PLAN.md`](project/IMPLEMENTATION_PLAN.md) — build order (historical/reference).
 
 ## Development
 
@@ -54,6 +55,36 @@ gorn build
 gorn cache
 gorn --version
 ```
+
+## Writing scripts
+
+The smallest scripts need no imports at all — Go's builtins (`len`, `append`,
+`make`, `min`/`max`, `clear`, `range`-over-int, and the debug-only
+`print`/`println`) are always available:
+
+```go
+//gorn:main
+for i := range 3 {
+	println("tick", i) // debug builtin: writes to stderr
+}
+```
+
+When a script needs real I/O or common helpers, `//gorn:preamble` makes a
+small, fixed set of packages ambient — `fmt`, `os`, `path/filepath`,
+`strconv`, `strings`, `time`, and gorn's own `sh` — so you can use them
+without writing the imports:
+
+```go
+//gorn:preamble
+//gorn:main
+fmt.Println("real output, on stdout")
+```
+
+Note: `print`/`println` are Go debug builtins — they write to **stderr** and
+their format isn't guaranteed. Use `fmt.Println` (via the preamble) for output
+a human or pipeline will read. See
+[`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) for the
+full format, the preamble package list, and its rules.
 
 ## License
 
