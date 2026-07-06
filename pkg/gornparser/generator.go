@@ -58,13 +58,11 @@ var preamblePackages = []struct{ Path, Symbol string }{
 	{"time", "time.Nanosecond"},
 }
 
-// Generated holds the successful output of Generate: a formatted main file,
-// its raw (pre-format) form, and a go.mod. Generate returns a non-nil error
-// (of type *GenerateError) instead of a partial Generated when generation
-// fails.
+// Generated holds the successful output of Generate: a formatted main file
+// and a go.mod. Generate returns a non-nil error (of type *GenerateError)
+// instead of a partial Generated when generation fails.
 type Generated struct {
 	MainFileFormatted []byte
-	MainGenerated     []byte
 	ModGenerated      []byte
 }
 
@@ -155,7 +153,6 @@ func Generate(s *Script) (*Generated, error) {
 
 	return &Generated{
 		MainFileFormatted: formattedMain,
-		MainGenerated:     mainGenerated,
 		ModGenerated:      modBuf.Bytes(),
 	}, nil
 }

@@ -17,13 +17,15 @@ var Version = "dev"
 var subcommandNames = []string{"run", "build", "cache"}
 
 type Common struct {
-	Verbose bool `help:"Enable verbose output"`
+	Verbose bool `arg:"-v,--verbose" help:"Enable verbose diagnostics on stderr"`
 }
 
 type RunCmd struct {
-	PrintGen bool     `arg:"--print-gen" help:"Print generated output"`
-	Script   string   `arg:"positional,required" placeholder:"script" help:"Script to run. Use - for stdin"`
-	Args     []string `arg:"positional" placeholder:"args" help:"Arguments to pass to the script"`
+	PrintGen  bool     `arg:"--print-gen" help:"Print generated go.mod and main.go, then exit (does not run)"`
+	PrintMod  bool     `arg:"--print-mod" help:"Print the generated go.mod, then exit (does not run)"`
+	PrintMain bool     `arg:"--print-main" help:"Print the generated main.go, then exit (does not run)"`
+	Script    string   `arg:"positional,required" placeholder:"script" help:"Script to run. Use - for stdin"`
+	Args      []string `arg:"positional" placeholder:"args" help:"Arguments to pass to the script"`
 }
 
 type BuildCmd struct {
@@ -49,53 +51,53 @@ func (CLI) Version() string {
 }
 
 func main() {
-	if err := RunCLI(os.Args[1:], os.Stdout, os.Exit); err != nil {
+	if err := RunCLI(os.Args[1:], os.Stdout, os.Stderr, os.Exit); err != nil {
 		fmt.Fprintf(os.Stderr, "gorn: error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func RunCLI(args []string, out io.Writer, exit func(int)) error {
+func RunCLI(args []string, stdout, stderr io.Writer, exit func(int)) error {
 	var cli CLI
 	var cmn Common
 
-	parser, err := newParser(out, exit, &cli, &cmn)
+	parser, err := newParser(stdout, exit, &cli, &cmn)
 	if err != nil {
 		return err
 	}
 	err = parser.Parse(args)
 	switch {
 	case errors.Is(err, arg.ErrHelp): // found "--help" on command line
-		parser.WriteHelp(out)
+		parser.WriteHelp(stdout)
 		exit(0)
 	case errors.Is(err, arg.ErrVersion): // found "--version" on command line
-		_, _ = fmt.Fprintln(out, cli.Version())
+		_, _ = fmt.Fprintln(stdout, cli.Version())
 		exit(0)
 	case err != nil:
 		if startsWithSubcommand(args) {
-			parser.WriteUsage(out)
+			parser.WriteUsage(stdout)
 			// RELEASE user facing error message
 			return fmt.Errorf("failed to parse subcommand: %w", err)
 		}
 		runCmd := RunCmd{}
-		runParser, err := newParser(out, exit, &runCmd, &cmn)
+		runParser, err := newParser(stdout, exit, &runCmd, &cmn)
 		if err != nil {
 			// RELEASE user facing error message
 			return fmt.Errorf("failed to create run parser: %w", err)
 		}
 		if err := runParser.Parse(args); err != nil {
-			runParser.WriteUsage(out)
+			runParser.WriteUsage(stdout)
 			// RELEASE user facing error message
 			return fmt.Errorf("failed to parse run command: %w", err)
 		}
-		if err := runCmd.Run(&cmn); err != nil {
-			runParser.WriteUsage(out)
+		if err := runCmd.Run(&cmn, stdout, stderr); err != nil {
+			runParser.WriteUsage(stdout)
 			return err
 		}
 		return nil
 	}
 
-	return runSelected(parser, &cmn, out)
+	return runSelected(parser, &cmn, stdout, stderr)
 }
 
 func startsWithSubcommand(args []string) bool {
@@ -116,30 +118,34 @@ func newParser(out io.Writer, exit func(int), dest ...any) (*arg.Parser, error) 
 	}, dest...)
 }
 
-func runSelected(parser *arg.Parser, common *Common, out io.Writer) error {
+func runSelected(parser *arg.Parser, common *Common, stdout, stderr io.Writer) error {
 	switch cmd := parser.Subcommand().(type) {
 	case *RunCmd:
-		return cmd.Run(common)
+		return cmd.Run(common, stdout, stderr)
 	case *BuildCmd:
-		return cmd.Run(common)
+		return cmd.Run(common, stdout, stderr)
 	case *CacheCmd:
-		return cmd.Run(common)
+		return cmd.Run(common, stdout, stderr)
 	default:
-		parser.WriteHelp(out)
+		parser.WriteHelp(stdout)
 		return nil
 	}
 }
 
-func (r *RunCmd) Run(common *Common) error {
+func (r *RunCmd) Run(common *Common, stdout, stderr io.Writer) error {
 	script, err := scriptPath(r.Script)
 	if err != nil {
 		return err
 	}
 	return app.RunCmd(app.RunOpts{
-		Verbose:  common.Verbose,
-		PrintGen: r.PrintGen,
-		Script:   script,
-		Args:     r.Args,
+		Stdout:    stdout,
+		Stderr:    stderr,
+		Verbose:   common.Verbose,
+		PrintGen:  r.PrintGen,
+		PrintMod:  r.PrintMod,
+		PrintMain: r.PrintMain,
+		Script:    script,
+		Args:      r.Args,
 	})
 }
 
@@ -157,13 +163,13 @@ func scriptPath(script string) (string, error) {
 	return script, nil
 }
 
-func (b *BuildCmd) Run(common *Common) error {
+func (b *BuildCmd) Run(common *Common, stdout, stderr io.Writer) error {
 	return app.BuildCmd(app.BuildOpts{
 		Verbose: common.Verbose,
 	})
 }
 
-func (c *CacheCmd) Run(common *Common) error {
+func (c *CacheCmd) Run(common *Common, stdout, stderr io.Writer) error {
 	return app.CacheCmd(app.CacheOpts{
 		Verbose: common.Verbose,
 	})

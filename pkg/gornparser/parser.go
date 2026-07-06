@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -92,6 +93,33 @@ type Script struct {
 	// follow it) is rejected with ErrEmptyMain, so MainStart is always
 	// a valid line (never 0) on a successful parse.
 	MainStart int
+}
+
+// Dump writes a developer-oriented summary of the parsed script, including
+// parser internals, to w on a best-effort basis. It backs `gorn run
+// --verbose` diagnostics.
+func (s *Script) Dump(w io.Writer) {
+	p := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format, args...) }
+	p("--- parsed script ---\n")
+	p("Path:         %s\n", s.SourcePath)
+	p("GoVersion:    %q\n", s.GoVersion)
+	p("Module:       %q\n", s.Module)
+	p("UsePreamble:  %t\n", s.UsePreamble)
+	p("Requires:     %+v\n", s.Requires)
+	p("PackageStart: %s\n", intPtrString(s.PackageStart))
+	p("MainStart:    %d\n", s.MainStart)
+	p("--- PackageContent ---\n")
+	p("%s", s.PackageContent)
+	p("--- MainContent ---\n")
+	p("%s", s.MainContent)
+	p("--- end ---\n")
+}
+
+func intPtrString(p *int) string {
+	if p == nil {
+		return "<nil>"
+	}
+	return strconv.Itoa(*p)
 }
 
 type Require struct {

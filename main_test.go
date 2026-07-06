@@ -9,9 +9,10 @@ import (
 )
 
 type runResult struct {
-	out  string
-	code int
-	err  error
+	stdout string
+	stderr string
+	code   int
+	err    error
 }
 
 type exitCode int
@@ -19,13 +20,11 @@ type exitCode int
 func runCLIForTest(t *testing.T, args ...string) (result runResult) {
 	t.Helper()
 
-	var cliOut bytes.Buffer
-	var stdout bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	result.code = -1
-	cleanup := captureStdout(t, &stdout)
 	defer func() {
-		cleanup()
-		result.out = cliOut.String() + stdout.String()
+		result.stdout = stdout.String()
+		result.stderr = stderr.String()
 		if v := recover(); v != nil {
 			code, ok := v.(exitCode)
 			if !ok {
@@ -35,34 +34,10 @@ func runCLIForTest(t *testing.T, args ...string) (result runResult) {
 		}
 	}()
 
-	result.err = RunCLI(args, &cliOut, func(code int) {
+	result.err = RunCLI(args, &stdout, &stderr, func(code int) {
 		panic(exitCode(code))
 	})
 	return result
-}
-
-func captureStdout(t *testing.T, out *bytes.Buffer) func() {
-	t.Helper()
-
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
-
-	done := make(chan struct{})
-	go func() {
-		_, _ = io.Copy(out, r)
-		close(done)
-	}()
-
-	return func() {
-		_ = w.Close()
-		os.Stdout = old
-		<-done
-		_ = r.Close()
-	}
 }
 
 func withStdin(t *testing.T, content string) func() {
@@ -91,8 +66,8 @@ func TestRunCLIVersion(t *testing.T) {
 	if got.code != 0 {
 		t.Fatalf("exit code = %d, want 0", got.code)
 	}
-	if strings.TrimSpace(got.out) != (CLI{}).Version() {
-		t.Fatalf("version output = %q", got.out)
+	if strings.TrimSpace(got.stdout) != (CLI{}).Version() {
+		t.Fatalf("version output = %q", got.stdout)
 	}
 }
 
@@ -101,15 +76,15 @@ func TestRunCLIHelp(t *testing.T) {
 	if top.err != nil {
 		t.Fatal(top.err)
 	}
-	if !strings.Contains(top.out, "Commands:") {
-		t.Fatalf("top help missing commands:\n%s", top.out)
+	if !strings.Contains(top.stdout, "Commands:") {
+		t.Fatalf("top help missing commands:\n%s", top.stdout)
 	}
 
 	run := runCLIForTest(t, "run", "--help")
 	if run.code != 0 {
 		t.Fatalf("exit code = %d, want 0", run.code)
 	}
-	usage := usageLine(run.out)
+	usage := usageLine(run.stdout)
 	for _, token := range []string{"--print-gen", "script", "args"} {
 		if !strings.Contains(usage, token) {
 			t.Fatalf("usage %q missing %q", usage, token)
@@ -120,6 +95,9 @@ func TestRunCLIHelp(t *testing.T) {
 	}
 }
 
+// TestRunCLIExplicitAndShorthandRunMatch checks that `gorn run x` and the
+// shorthand `gorn x` dispatch identically (both currently print the
+// not-implemented notice on stderr, nothing on stdout).
 func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
 	explicit := runCLIForTest(t, "run", "testdata/clean.gorn", "--", "--flag")
 	shorthand := runCLIForTest(t, "testdata/clean.gorn", "--", "--flag")
@@ -129,29 +107,126 @@ func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
 	if shorthand.err != nil {
 		t.Fatal(shorthand.err)
 	}
-	if explicit.out != shorthand.out {
-		t.Fatalf("explicit and shorthand output differ:\nexplicit:\n%s\nshorthand:\n%s", explicit.out, shorthand.out)
+	if explicit.stdout != shorthand.stdout || explicit.stderr != shorthand.stderr {
+		t.Fatalf("explicit and shorthand output differ:\nexplicit out=%q err=%q\nshorthand out=%q err=%q",
+			explicit.stdout, explicit.stderr, shorthand.stdout, shorthand.stderr)
 	}
 }
 
-func TestRunCLIGlobalVerboseAppliesToRunAndShorthand(t *testing.T) {
+func TestRunCLIVerboseAppliesToRunAndShorthand(t *testing.T) {
 	explicit := runCLIForTest(t, "--verbose", "run", "testdata/clean.gorn")
 	shorthand := runCLIForTest(t, "--verbose", "testdata/clean.gorn")
 	plain := runCLIForTest(t, "run", "testdata/clean.gorn")
-	if explicit.err != nil {
-		t.Fatal(explicit.err)
+	for _, r := range []runResult{explicit, shorthand, plain} {
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
 	}
-	if shorthand.err != nil {
-		t.Fatal(shorthand.err)
+	if explicit.stderr != shorthand.stderr {
+		t.Fatalf("verbose explicit and shorthand stderr differ:\n%q\n%q", explicit.stderr, shorthand.stderr)
 	}
-	if plain.err != nil {
-		t.Fatal(plain.err)
+	if explicit.stderr == plain.stderr {
+		t.Fatalf("verbose stderr matched plain stderr:\n%s", explicit.stderr)
 	}
-	if explicit.out != shorthand.out {
-		t.Fatalf("verbose explicit and shorthand output differ:\nexplicit:\n%s\nshorthand:\n%s", explicit.out, shorthand.out)
+	if !strings.Contains(explicit.stderr, "--- parsed script ---") {
+		t.Fatalf("verbose stderr missing dump:\n%s", explicit.stderr)
 	}
-	if explicit.out == plain.out {
-		t.Fatalf("verbose output matched plain output:\n%s", explicit.out)
+}
+
+// TestRunCLIVerboseUsesShortAlias confirms -v is accepted for --verbose.
+func TestRunCLIVerboseUsesShortAlias(t *testing.T) {
+	got := runCLIForTest(t, "-v", "testdata/clean.gorn")
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if !strings.Contains(got.stderr, "--- parsed script ---") {
+		t.Fatalf("-v did not enable verbose dump:\n%s", got.stderr)
+	}
+}
+
+func TestRunCLINormalRunPrintsNotice(t *testing.T) {
+	got := runCLIForTest(t, "run", "testdata/clean.gorn")
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if got.stdout != "" {
+		t.Fatalf("normal run wrote to stdout: %q", got.stdout)
+	}
+	if !strings.Contains(got.stderr, "not implemented") {
+		t.Fatalf("normal run missing notice on stderr:\n%s", got.stderr)
+	}
+}
+
+// TestRunCLINormalRunSurfacesParseError checks that a script which fails to
+// parse surfaces the parse error rather than the not-implemented notice.
+func TestRunCLINormalRunSurfacesParseError(t *testing.T) {
+	got := runCLIForTest(t, "run", "testdata/missing_main.gorn")
+	if got.err == nil {
+		t.Fatal("error = nil, want parse error")
+	}
+	if !strings.Contains(got.err.Error(), "missing //gorn:main") {
+		t.Fatalf("error = %v, want missing //gorn:main", got.err)
+	}
+	if strings.Contains(got.stderr, "not implemented") {
+		t.Fatalf("reached not-implemented notice despite parse failure:\n%s", got.stderr)
+	}
+}
+
+// TestRunCLINormalRunSurfacesGenerateError checks that a plain run (no print
+// flags) still validates via generation — an invalid script surfaces the
+// generation error instead of the not-implemented notice.
+func TestRunCLINormalRunSurfacesGenerateError(t *testing.T) {
+	got := runCLIForTest(t, "run", "testdata/duplicate_import.gorn")
+	if got.err == nil {
+		t.Fatal("error = nil, want preamble import conflict")
+	}
+	if !strings.Contains(got.err.Error(), "conflicts with //gorn:preamble") {
+		t.Fatalf("error = %v, want preamble import conflict", got.err)
+	}
+	if strings.Contains(got.stderr, "not implemented") {
+		t.Fatalf("reached not-implemented notice despite invalid script:\n%s", got.stderr)
+	}
+}
+
+func TestRunCLIPrintModEmitsRawGoMod(t *testing.T) {
+	got := runCLIForTest(t, "run", "--print-mod", "testdata/clean.gorn")
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if !strings.HasPrefix(got.stdout, "module ") {
+		t.Fatalf("--print-mod stdout is not a raw go.mod:\n%s", got.stdout)
+	}
+	if strings.Contains(got.stdout, "// ---") {
+		t.Fatalf("--print-mod (single artifact) should have no header:\n%s", got.stdout)
+	}
+	if strings.Contains(got.stdout, "package main") {
+		t.Fatalf("--print-mod stdout unexpectedly contains main.go:\n%s", got.stdout)
+	}
+}
+
+func TestRunCLIPrintMainEmitsRawMain(t *testing.T) {
+	got := runCLIForTest(t, "run", "--print-main", "testdata/clean.gorn")
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if !strings.Contains(got.stdout, "package main") || !strings.Contains(got.stdout, "func main()") {
+		t.Fatalf("--print-main stdout is not a main.go:\n%s", got.stdout)
+	}
+	if strings.Contains(got.stdout, "// ---") {
+		t.Fatalf("--print-main (single artifact) should have no header:\n%s", got.stdout)
+	}
+}
+
+func TestRunCLIPrintGenEmitsBothWithHeaders(t *testing.T) {
+	got := runCLIForTest(t, "run", "--print-gen", "testdata/clean.gorn")
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if !strings.Contains(got.stdout, "// --- go.mod ---") || !strings.Contains(got.stdout, "// --- main.go ---") {
+		t.Fatalf("--print-gen missing headers:\n%s", got.stdout)
+	}
+	if !strings.Contains(got.stdout, "module ") || !strings.Contains(got.stdout, "package main") {
+		t.Fatalf("--print-gen missing go.mod or main.go content:\n%s", got.stdout)
 	}
 }
 
@@ -169,8 +244,9 @@ func TestRunCLIErrorsDoNotRun(t *testing.T) {
 			if got.err == nil {
 				t.Fatal("error = nil")
 			}
-			if strings.Contains(got.out, "Running script:") {
-				t.Fatalf("command ran despite error:\n%s", got.out)
+			// Erroring before the run branch means the notice never prints.
+			if strings.Contains(got.stderr, "not implemented") {
+				t.Fatalf("reached run branch despite error:\n%s", got.stderr)
 			}
 		})
 	}
@@ -181,11 +257,8 @@ func TestRunCLIFallbackErrorPrintsUsage(t *testing.T) {
 	if got.err == nil {
 		t.Fatal("error = nil")
 	}
-	if strings.Contains(got.out, "Running script:") {
-		t.Fatalf("command ran despite error:\n%s", got.out)
-	}
-	if !strings.Contains(got.out, "Usage:") {
-		t.Fatalf("fallback error did not print usage:\n%s", got.out)
+	if !strings.Contains(got.stdout, "Usage:") {
+		t.Fatalf("fallback error did not print usage:\n%s", got.stdout)
 	}
 }
 
@@ -197,21 +270,18 @@ func TestRunCLIDoesNotFallbackForExplicitSubcommandErrors(t *testing.T) {
 	if strings.Contains(got.err.Error(), "stat run") {
 		t.Fatalf("explicit run fell back to script lookup: %v", got.err)
 	}
-	if strings.Contains(got.out, "Running script:") {
-		t.Fatalf("command ran despite explicit subcommand error:\n%s", got.out)
-	}
 }
 
 func TestRunCLIStdinShorthand(t *testing.T) {
 	cleanup := withStdin(t, "//gorn:main\nprintln(\"hi\")\n")
 	defer cleanup()
 
-	got := runCLIForTest(t, "-", "--", "--flag")
+	got := runCLIForTest(t, "-", "--print-main")
 	if got.err != nil {
 		t.Fatal(got.err)
 	}
-	if !strings.Contains(got.out, "Running script: -") || !strings.Contains(got.out, "--flag") {
-		t.Fatalf("stdin shorthand output missing script or arg:\n%s", got.out)
+	if !strings.Contains(got.stdout, `println("hi")`) {
+		t.Fatalf("stdin script not reflected in generated main:\n%s", got.stdout)
 	}
 }
 

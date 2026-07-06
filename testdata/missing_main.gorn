@@ -1,0 +1,11 @@
+#!/usr/bin/env gorn
+//gorn:go 1.26
+//gorn:preamble
+
+// This script is intentionally invalid: it has no //gorn:main directive, so
+// the parser cannot tell where the package section ends and the main section
+// begins. Parsing fails with ErrMissingMain.
+
+for _, arg := range os.Args[1:] {
+	fmt.Println(arg)
+}
