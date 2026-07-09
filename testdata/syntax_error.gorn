@@ -1,0 +1,9 @@
+#!/usr/bin/env gorn
+//gorn:go 1.26
+//gorn:main
+
+// No package section: no imports or declarations, just main statements
+// using only Go builtins.
+for i := rang 3 {
+	println("tick", i)
+}

@@ -2,8 +2,6 @@ package gornparser_test
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/gornkit/gorn/pkg/gornparser"
@@ -368,30 +366,6 @@ func TestParseSourceRequiresExactDirectiveNames(t *testing.T) {
 				t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrInvalidDirective)
 			}
 		})
-	}
-}
-
-func TestParseFileReadsPath(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "script.gorn")
-	source := []byte("//gorn:main\nprintln(\"from file\")\n")
-	if err := os.WriteFile(path, source, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	script, err := gornparser.ParseFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if script.SourcePath != path {
-		t.Fatalf("Path = %q, want %q", script.SourcePath, path)
-	}
-}
-
-func TestParseFileReportsReadErrors(t *testing.T) {
-	_, err := gornparser.ParseFile(filepath.Join(t.TempDir(), "missing.gorn"))
-	if !errors.Is(err, gornparser.ErrFailedToReadFile) {
-		t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrFailedToReadFile)
 	}
 }
 

@@ -144,21 +144,6 @@ func TestRunCLIVerboseUsesShortAlias(t *testing.T) {
 	}
 }
 
-func TestRunCLINormalRunPrintsNotice(t *testing.T) {
-	got := runCLIForTest(t, "run", "testdata/clean.gorn")
-	if got.err != nil {
-		t.Fatal(got.err)
-	}
-	if got.stdout != "" {
-		t.Fatalf("normal run wrote to stdout: %q", got.stdout)
-	}
-	if !strings.Contains(got.stderr, "not implemented") {
-		t.Fatalf("normal run missing notice on stderr:\n%s", got.stderr)
-	}
-}
-
-// TestRunCLINormalRunSurfacesParseError checks that a script which fails to
-// parse surfaces the parse error rather than the not-implemented notice.
 func TestRunCLINormalRunSurfacesParseError(t *testing.T) {
 	got := runCLIForTest(t, "run", "testdata/missing_main.gorn")
 	if got.err == nil {

@@ -12,7 +12,7 @@ import (
 	"text/template"
 )
 
-const moduleDefaultTemplate string = "gorn.local/app/%s"
+const moduleDefault string = "gorn.local/app"
 
 // defaultGoVersion is used when a script omits //gorn:go. It is a deliberate,
 // hand-maintained floor — nothing enforces that it tracks gorn's own go.mod, so
@@ -101,7 +101,7 @@ func Generate(s *Script) (*Generated, error) {
 	}
 
 	if modData.Module == "" {
-		modData.Module = fmt.Sprintf(moduleDefaultTemplate, s.SourceHashShort)
+		modData.Module = moduleDefault
 	}
 	if modData.GoVersion == "" {
 		modData.GoVersion = defaultGoVersion
@@ -148,6 +148,12 @@ func Generate(s *Script) (*Generated, error) {
 	mainGenerated := mainBuf.Bytes()
 	formattedMain, err := format.Source(mainGenerated)
 	if err != nil {
+		return nil, &GenerateError{Err: err, Raw: mainGenerated}
+	}
+
+	fset := token.NewFileSet()
+	// Parse the formatted main file to ensure it is valid Go code.
+	if _, err := parser.ParseFile(fset, s.SourcePath, formattedMain, parser.SkipObjectResolution); err != nil {
 		return nil, &GenerateError{Err: err, Raw: mainGenerated}
 	}
 

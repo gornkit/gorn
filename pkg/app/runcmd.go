@@ -5,30 +5,61 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 
+	"github.com/gornkit/gorn/pkg/fs"
 	"github.com/gornkit/gorn/pkg/gornparser"
 )
 
 type RunOpts struct {
-	Stdout    io.Writer
-	Stderr    io.Writer
-	Verbose   bool
-	PrintGen  bool
-	PrintMod  bool
-	PrintMain bool
-	Script    string
-	Args      []string
+	Stdout     io.Writer
+	Stderr     io.Writer
+	Verbose    bool
+	PrintGen   bool
+	PrintMod   bool
+	PrintMain  bool
+	NoCache    bool
+	ScriptPath string
+	Args       []string
 }
 
 func RunCmd(o RunOpts) error {
-	script, err := parseScript(o.Script)
+	source, err := readSource(o.ScriptPath)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", o.Script, err)
+		return fmt.Errorf("read %s: %w", o.ScriptPath, err)
+	}
+	if o.Verbose {
+		_, _ = fmt.Fprintf(o.Stderr, "--- script source (%d bytes) ---\n", len(source))
+		_, _ = fmt.Fprint(o.Stderr, string(source))
+	}
+	if len(source) == 0 {
+		return fmt.Errorf("script %s is empty", o.ScriptPath)
+	}
+
+	appKey := fs.GenerateAppKey(o.ScriptPath, source)
+
+	cacheRoot, err := fs.NewCacheRoot()
+	if err != nil {
+		return err
+	}
+
+	if !o.NoCache {
+		if appBin, ok := cacheRoot.CachedBin(appKey); ok {
+			if o.Verbose {
+				_, _ = fmt.Fprintf(o.Stderr, "using cached bin: %s\n", appBin)
+			}
+			return execCmd(o, appBin)
+		}
+	}
+
+	script, err := gornparser.ParseSource(parsePath(o.ScriptPath), source)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", o.ScriptPath, err)
 	}
 
 	if o.Verbose {
 		_, _ = fmt.Fprintln(o.Stderr, "--- invocation ---")
-		_, _ = fmt.Fprintf(o.Stderr, "Script: %s\n", o.Script)
+		_, _ = fmt.Fprintf(o.Stderr, "Script: %s\n", o.ScriptPath)
 		_, _ = fmt.Fprintf(o.Stderr, "Args:   %v\n", o.Args)
 		flags := []string{}
 		if o.PrintGen {
@@ -64,7 +95,42 @@ func RunCmd(o RunOpts) error {
 		return nil
 	}
 
-	_, _ = fmt.Fprintln(o.Stderr, "gorn: run pipeline not implemented yet; use --print-gen to inspect generated output")
+	// Cache miss: serialize builders for this key so concurrent runs don't race
+	// on the same app dir.
+	lock, err := cacheRoot.Lock(appKey)
+	if err != nil {
+		return fmt.Errorf("lock: %w", err)
+	}
+	defer func() { _ = lock.Release() }()
+
+	// Re-check: a peer may have finished the build while we waited for the lock.
+	if !o.NoCache {
+		if appBin, ok := cacheRoot.CachedBin(appKey); ok {
+			if o.Verbose {
+				_, _ = fmt.Fprintf(o.Stderr, "using cached bin: %s\n", appBin)
+			}
+			return execCmd(o, appBin)
+		}
+	}
+
+	emitted, err := fs.Emit(cacheRoot, script, gen, appKey)
+	if err != nil {
+		return fmt.Errorf("emit: %w", err)
+	}
+
+	return execCmd(o, emitted.AppPath)
+}
+
+func execCmd(o RunOpts, appBin string) error {
+	cmd := exec.Command(appBin, o.Args...) //nolint:gosec  // G204
+	cmd.Stdout = o.Stdout
+	cmd.Stderr = o.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+
 	return nil
 }
 
@@ -90,15 +156,30 @@ func printArtifacts(o RunOpts, gen *gornparser.Generated) {
 	}
 }
 
-// parseScript wraps gornparser, handling the "-" (stdin) convention that
-// scriptPath already validated for us.
-func parseScript(path string) (*gornparser.Script, error) {
-	if path == "-" {
+func readSource(path string) ([]byte, error) {
+	switch path {
+	case "":
+		return nil, fmt.Errorf("script path is empty")
+	case "-":
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read stdin: %w", err)
 		}
-		return gornparser.ParseSource("-", data)
+		return data, nil
+	default:
+		data, err := os.ReadFile(path) //nolint:gosec // G304: File path provided by user. Disabling because this is a CLI tool, not a server.
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", path, err)
+		}
+		return data, nil
 	}
-	return gornparser.ParseFile(path)
+}
+
+// parsePath maps the "-" stdin convention to a display path for the parser;
+// the source bytes are read once by the caller and passed to ParseSource.
+func parsePath(path string) string {
+	if path == "-" {
+		return "/dev/stdin"
+	}
+	return path
 }

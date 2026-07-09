@@ -24,6 +24,7 @@ type RunCmd struct {
 	PrintGen  bool     `arg:"--print-gen" help:"Print generated go.mod and main.go, then exit (does not run)"`
 	PrintMod  bool     `arg:"--print-mod" help:"Print the generated go.mod, then exit (does not run)"`
 	PrintMain bool     `arg:"--print-main" help:"Print the generated main.go, then exit (does not run)"`
+	NoCache   bool     `arg:"--no-cache" help:"Bypass any cached app output"`
 	Script    string   `arg:"positional,required" placeholder:"script" help:"Script to run. Use - for stdin"`
 	Args      []string `arg:"positional" placeholder:"args" help:"Arguments to pass to the script"`
 }
@@ -138,14 +139,15 @@ func (r *RunCmd) Run(common *Common, stdout, stderr io.Writer) error {
 		return err
 	}
 	return app.RunCmd(app.RunOpts{
-		Stdout:    stdout,
-		Stderr:    stderr,
-		Verbose:   common.Verbose,
-		PrintGen:  r.PrintGen,
-		PrintMod:  r.PrintMod,
-		PrintMain: r.PrintMain,
-		Script:    script,
-		Args:      r.Args,
+		Stdout:     stdout,
+		Stderr:     stderr,
+		Verbose:    common.Verbose,
+		PrintGen:   r.PrintGen,
+		PrintMod:   r.PrintMod,
+		PrintMain:  r.PrintMain,
+		NoCache:    r.NoCache,
+		ScriptPath: script,
+		Args:       r.Args,
 	})
 }
 

@@ -60,7 +60,7 @@ func TestGenerateProducesModuleAndFormattedMain(t *testing.T) {
 	}
 }
 
-func TestGenerateDefaultsModuleToSourceHash(t *testing.T) {
+func TestGenerateDefaultsModuleWhenOmitted(t *testing.T) {
 	source := []byte("//gorn:go 1.26\n" +
 		"//gorn:main\n" +
 		"println(\"hello\")\n")
@@ -75,7 +75,7 @@ func TestGenerateDefaultsModuleToSourceHash(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := "module gorn.local/app/" + script.SourceHashShort + "\n\n" +
+	want := "module gorn.local/app\n\n" +
 		"go 1.26\n"
 	if got := string(generated.ModGenerated); got != want {
 		t.Fatalf("ModGenerated = %q, want %q", got, want)
