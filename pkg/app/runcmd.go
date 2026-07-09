@@ -142,8 +142,7 @@ func printArtifacts(o RunOpts, gen *gornparser.Generated) {
 
 // readSource reads the script source bytes and returns them along with:
 //   - pathLabel: the label to use for parse error messages ("-" for stdin)
-//   - absPath: the absolute path used to generate the app cache key (empty
-//     string for stdin, which uses "-")
+//   - absPath: the absolute path used to generate the app cache key ("-" for stdin)
 func readSource(path string) (source []byte, pathLabel, absPath string, err error) {
 	if path == "-" {
 		data, readErr := io.ReadAll(os.Stdin)

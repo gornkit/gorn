@@ -54,7 +54,7 @@ func (c CacheRoot) Lock(appKey AppKey) (*Lock, error) {
 		}
 
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("acquire lock: timed out after %s", lockTimeout)
+			return nil, fmt.Errorf("acquire lock %s: timed out after %s", lockDir, lockTimeout)
 		}
 
 		time.Sleep(lockPoll)

@@ -44,8 +44,8 @@ func GenerateAppKey(absPath string, source []byte) AppKey {
 	data, err := json.Marshal(inputs)
 	if err != nil {
 		// json.Marshal of a plain struct with only basic types never fails;
-		// panic here would indicate a programming error, not a runtime condition.
-		panic("fs: GenerateAppKey: json.Marshal failed: " + err.Error())
+		// panic here indicates a bug in gorn, not a runtime condition.
+		panic("fs: GenerateAppKey: unexpected json.Marshal error (this is a bug in gorn): " + err.Error())
 	}
 
 	sum := sha256.Sum256(data)
