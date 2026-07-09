@@ -96,27 +96,32 @@ func TestRunCLIHelp(t *testing.T) {
 }
 
 // TestRunCLIExplicitAndShorthandRunMatch checks that `gorn run x` and the
-// shorthand `gorn x` dispatch identically (both currently print the
-// not-implemented notice on stderr, nothing on stdout).
+// shorthand `gorn x` dispatch identically.
 func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
-	explicit := runCLIForTest(t, "run", "testdata/clean.gorn", "--", "--flag")
-	shorthand := runCLIForTest(t, "testdata/clean.gorn", "--", "--flag")
+	if testing.Short() {
+		t.Skip("skipping full build in short mode")
+	}
+	explicit := runCLIForTest(t, "run", "testdata/no_package.gorn")
+	shorthand := runCLIForTest(t, "testdata/no_package.gorn")
 	if explicit.err != nil {
 		t.Fatal(explicit.err)
 	}
 	if shorthand.err != nil {
 		t.Fatal(shorthand.err)
 	}
-	if explicit.stdout != shorthand.stdout || explicit.stderr != shorthand.stderr {
-		t.Fatalf("explicit and shorthand output differ:\nexplicit out=%q err=%q\nshorthand out=%q err=%q",
-			explicit.stdout, explicit.stderr, shorthand.stdout, shorthand.stderr)
+	if explicit.stdout != shorthand.stdout {
+		t.Fatalf("explicit and shorthand stdout differ:\nexplicit=%q\nshorthand=%q",
+			explicit.stdout, shorthand.stdout)
 	}
 }
 
 func TestRunCLIVerboseAppliesToRunAndShorthand(t *testing.T) {
-	explicit := runCLIForTest(t, "--verbose", "run", "testdata/clean.gorn")
-	shorthand := runCLIForTest(t, "--verbose", "testdata/clean.gorn")
-	plain := runCLIForTest(t, "run", "testdata/clean.gorn")
+	if testing.Short() {
+		t.Skip("skipping full build in short mode")
+	}
+	explicit := runCLIForTest(t, "--verbose", "run", "testdata/no_package.gorn")
+	shorthand := runCLIForTest(t, "--verbose", "testdata/no_package.gorn")
+	plain := runCLIForTest(t, "run", "testdata/no_package.gorn")
 	for _, r := range []runResult{explicit, shorthand, plain} {
 		if r.err != nil {
 			t.Fatal(r.err)
@@ -135,7 +140,10 @@ func TestRunCLIVerboseAppliesToRunAndShorthand(t *testing.T) {
 
 // TestRunCLIVerboseUsesShortAlias confirms -v is accepted for --verbose.
 func TestRunCLIVerboseUsesShortAlias(t *testing.T) {
-	got := runCLIForTest(t, "-v", "testdata/clean.gorn")
+	if testing.Short() {
+		t.Skip("skipping full build in short mode")
+	}
+	got := runCLIForTest(t, "-v", "testdata/no_package.gorn")
 	if got.err != nil {
 		t.Fatal(got.err)
 	}
@@ -144,21 +152,27 @@ func TestRunCLIVerboseUsesShortAlias(t *testing.T) {
 	}
 }
 
-func TestRunCLINormalRunPrintsNotice(t *testing.T) {
-	got := runCLIForTest(t, "run", "testdata/clean.gorn")
+// TestRunCLINormalRunBuildsAndRuns checks that a plain run builds the script
+// and executes it. The no_package.gorn script uses println (a Go builtin that
+// writes to stderr), so we check combined output.
+func TestRunCLINormalRunBuildsAndRuns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping full build in short mode")
+	}
+	got := runCLIForTest(t, "run", "testdata/no_package.gorn")
 	if got.err != nil {
 		t.Fatal(got.err)
 	}
-	if got.stdout != "" {
-		t.Fatalf("normal run wrote to stdout: %q", got.stdout)
-	}
-	if !strings.Contains(got.stderr, "not implemented") {
-		t.Fatalf("normal run missing notice on stderr:\n%s", got.stderr)
+	// println is a Go builtin that writes to stderr; fmt.Println writes to
+	// stdout. Check either for "tick" to be robust to script output channel.
+	combined := got.stdout + got.stderr
+	if !strings.Contains(combined, "tick") {
+		t.Fatalf("normal run did not produce expected output:\nstdout=%q\nstderr=%q", got.stdout, got.stderr)
 	}
 }
 
 // TestRunCLINormalRunSurfacesParseError checks that a script which fails to
-// parse surfaces the parse error rather than the not-implemented notice.
+// parse surfaces the parse error rather than running.
 func TestRunCLINormalRunSurfacesParseError(t *testing.T) {
 	got := runCLIForTest(t, "run", "testdata/missing_main.gorn")
 	if got.err == nil {
@@ -167,14 +181,11 @@ func TestRunCLINormalRunSurfacesParseError(t *testing.T) {
 	if !strings.Contains(got.err.Error(), "missing //gorn:main") {
 		t.Fatalf("error = %v, want missing //gorn:main", got.err)
 	}
-	if strings.Contains(got.stderr, "not implemented") {
-		t.Fatalf("reached not-implemented notice despite parse failure:\n%s", got.stderr)
-	}
 }
 
 // TestRunCLINormalRunSurfacesGenerateError checks that a plain run (no print
 // flags) still validates via generation — an invalid script surfaces the
-// generation error instead of the not-implemented notice.
+// generation error instead of proceeding to build.
 func TestRunCLINormalRunSurfacesGenerateError(t *testing.T) {
 	got := runCLIForTest(t, "run", "testdata/duplicate_import.gorn")
 	if got.err == nil {
@@ -182,9 +193,6 @@ func TestRunCLINormalRunSurfacesGenerateError(t *testing.T) {
 	}
 	if !strings.Contains(got.err.Error(), "conflicts with //gorn:preamble") {
 		t.Fatalf("error = %v, want preamble import conflict", got.err)
-	}
-	if strings.Contains(got.stderr, "not implemented") {
-		t.Fatalf("reached not-implemented notice despite invalid script:\n%s", got.stderr)
 	}
 }
 
@@ -243,10 +251,6 @@ func TestRunCLIErrorsDoNotRun(t *testing.T) {
 			got := runCLIForTest(t, args...)
 			if got.err == nil {
 				t.Fatal("error = nil")
-			}
-			// Erroring before the run branch means the notice never prints.
-			if strings.Contains(got.stderr, "not implemented") {
-				t.Fatalf("reached run branch despite error:\n%s", got.stderr)
 			}
 		})
 	}

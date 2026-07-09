@@ -2,8 +2,6 @@ package gornparser
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -49,12 +47,6 @@ func lineError(line int, err error) *Error {
 type Script struct {
 	// SourcePath is the path passed to ParseFile/ParseSource ("-" for stdin).
 	SourcePath string
-
-	// SourceHash is the hex-encoded SHA-256 of the full original source
-	// (64 characters). SourceHashShort is its first 8 characters, used to
-	// derive a stable default module path when a script omits //gorn:module.
-	SourceHash      string
-	SourceHashShort string
 
 	GoVersion   string
 	Module      string
@@ -150,13 +142,9 @@ func ParseSource(path string, source []byte) (*Script, error) {
 		return nil, ErrEmptyScript
 	}
 
-	sourceHashBytes := sha256.Sum256(source)
-	sourceHash := hex.EncodeToString(sourceHashBytes[:])
 	state := &state{
 		script: &Script{
-			SourcePath:      path,
-			SourceHash:      sourceHash,
-			SourceHashShort: sourceHash[:8],
+			SourcePath: path,
 		},
 	}
 

@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 
+	"github.com/gornkit/gorn/pkg/fs"
 	"github.com/gornkit/gorn/pkg/gornparser"
 )
 
@@ -21,7 +24,12 @@ type RunOpts struct {
 }
 
 func RunCmd(o RunOpts) error {
-	script, err := parseScript(o.Script)
+	source, pathLabel, absPath, err := readSource(o.Script)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", o.Script, err)
+	}
+
+	script, err := gornparser.ParseSource(pathLabel, source)
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", o.Script, err)
 	}
@@ -64,7 +72,49 @@ func RunCmd(o RunOpts) error {
 		return nil
 	}
 
-	_, _ = fmt.Fprintln(o.Stderr, "gorn: run pipeline not implemented yet; use --print-gen to inspect generated output")
+	cacheRoot, err := fs.NewCacheRoot()
+	if err != nil {
+		return fmt.Errorf("cache root: %w", err)
+	}
+
+	appKey := fs.GenerateAppKey(absPath, source)
+
+	// Fast path: binary already cached and valid.
+	if bin, ok := cacheRoot.CachedBin(appKey); ok {
+		return execCmd(bin, o)
+	}
+
+	// Slow path: acquire the per-app lock before building.
+	lock, err := cacheRoot.Lock(appKey)
+	if err != nil {
+		return fmt.Errorf("acquire lock: %w", err)
+	}
+	defer func() { _ = lock.Release() }()
+
+	// Re-check after acquiring the lock: a concurrent builder may have
+	// finished while we were waiting.
+	if bin, ok := cacheRoot.CachedBin(appKey); ok {
+		return execCmd(bin, o)
+	}
+
+	emitted, err := fs.Emit(cacheRoot, script, gen, appKey)
+	if err != nil {
+		return fmt.Errorf("emit: %w", err)
+	}
+
+	return execCmd(emitted.BinFile, o)
+}
+
+// execCmd runs the compiled binary, forwarding stdout/stderr from o and
+// passing any extra args.
+func execCmd(bin string, o RunOpts) error {
+	cmd := exec.Command(bin, o.Args...) //nolint:gosec // bin is a path we just compiled
+	cmd.Stdout = o.Stdout
+	cmd.Stderr = o.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
 	return nil
 }
 
@@ -90,15 +140,28 @@ func printArtifacts(o RunOpts, gen *gornparser.Generated) {
 	}
 }
 
-// parseScript wraps gornparser, handling the "-" (stdin) convention that
-// scriptPath already validated for us.
-func parseScript(path string) (*gornparser.Script, error) {
+// readSource reads the script source bytes and returns them along with:
+//   - pathLabel: the label to use for parse error messages ("-" for stdin)
+//   - absPath: the absolute path used to generate the app cache key (empty
+//     string for stdin, which uses "-")
+func readSource(path string) (source []byte, pathLabel, absPath string, err error) {
 	if path == "-" {
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return nil, err
+		data, readErr := io.ReadAll(os.Stdin)
+		if readErr != nil {
+			return nil, "", "", readErr
 		}
-		return gornparser.ParseSource("-", data)
+		return data, "-", "-", nil
 	}
-	return gornparser.ParseFile(path)
+
+	abs, absErr := filepath.Abs(path)
+	if absErr != nil {
+		return nil, "", "", absErr
+	}
+
+	data, readErr := os.ReadFile(abs) //nolint:gosec // path is user-provided script
+	if readErr != nil {
+		return nil, "", "", readErr
+	}
+
+	return data, abs, abs, nil
 }
