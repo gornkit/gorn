@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gornkit/gorn/pkg/fs"
 )
 
 type runResult struct {
@@ -119,8 +122,11 @@ func TestRunCLIVerboseAppliesToRunAndShorthand(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping full build in short mode")
 	}
+	t.Setenv("GORN_CACHE", t.TempDir())
 	explicit := runCLIForTest(t, "--verbose", "run", "testdata/no_package.gorn")
+	t.Setenv("GORN_CACHE", t.TempDir())
 	shorthand := runCLIForTest(t, "--verbose", "testdata/no_package.gorn")
+	t.Setenv("GORN_CACHE", t.TempDir())
 	plain := runCLIForTest(t, "run", "testdata/no_package.gorn")
 	for _, r := range []runResult{explicit, shorthand, plain} {
 		if r.err != nil {
@@ -143,6 +149,7 @@ func TestRunCLIVerboseUsesShortAlias(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping full build in short mode")
 	}
+	t.Setenv("GORN_CACHE", t.TempDir())
 	got := runCLIForTest(t, "-v", "testdata/no_package.gorn")
 	if got.err != nil {
 		t.Fatal(got.err)
@@ -235,6 +242,44 @@ func TestRunCLIPrintGenEmitsBothWithHeaders(t *testing.T) {
 	}
 	if !strings.Contains(got.stdout, "module ") || !strings.Contains(got.stdout, "package main") {
 		t.Fatalf("--print-gen missing go.mod or main.go content:\n%s", got.stdout)
+	}
+}
+
+func TestRunCLIPrintMainUsesCachedGeneratedFileOnHit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping full build in short mode")
+	}
+
+	cacheDir := t.TempDir()
+	t.Setenv("GORN_CACHE", cacheDir)
+
+	first := runCLIForTest(t, "run", "testdata/no_package.gorn")
+	if first.err != nil {
+		t.Fatal(first.err)
+	}
+
+	abs, err := filepath.Abs("testdata/no_package.gorn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(abs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appKey := fs.GenerateAppKey(abs, source)
+	root := fs.CacheRoot(cacheDir)
+
+	const sentinel = "// cached-print-sentinel\n"
+	if err := os.WriteFile(root.AppMainFile(appKey), []byte(sentinel), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runCLIForTest(t, "run", "--print-main", "testdata/no_package.gorn")
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if got.stdout != sentinel {
+		t.Fatalf("expected --print-main to read cached main.gorn.go:\nstdout=%q\nwant=%q", got.stdout, sentinel)
 	}
 }
 

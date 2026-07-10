@@ -56,6 +56,16 @@ func (c CacheRoot) AppBinFile(appKey AppKey) string {
 	return filepath.Join(c.AppBinDir(appKey), binName())
 }
 
+// AppModFile returns the full path to the cached go.mod for appKey.
+func (c CacheRoot) AppModFile(appKey AppKey) string {
+	return filepath.Join(c.AppDir(appKey), "go.mod")
+}
+
+// AppMainFile returns the full path to the cached generated main file for appKey.
+func (c CacheRoot) AppMainFile(appKey AppKey) string {
+	return filepath.Join(c.AppDir(appKey), "main.gorn.go")
+}
+
 // binName returns the platform-appropriate name for the compiled app binary.
 func binName() string {
 	if runtime.GOOS == "windows" {
@@ -87,4 +97,32 @@ func (c CacheRoot) CachedBin(appKey AppKey) (string, bool) {
 	}
 
 	return bin, true
+}
+
+// CachedGenerated holds cached generated source files from a valid app slot.
+type CachedGenerated struct {
+	ModGenerated      []byte
+	MainFileFormatted []byte
+}
+
+// CachedGeneratedFiles returns generated source files when appKey is a valid
+// cache hit; otherwise it returns ({}, false).
+func (c CacheRoot) CachedGeneratedFiles(appKey AppKey) (CachedGenerated, bool) {
+	if _, ok := c.CachedBin(appKey); !ok {
+		return CachedGenerated{}, false
+	}
+
+	modFile, err := os.ReadFile(c.AppModFile(appKey)) //nolint:gosec // cache root is internal and key-gated
+	if err != nil {
+		return CachedGenerated{}, false
+	}
+	mainFile, err := os.ReadFile(c.AppMainFile(appKey)) //nolint:gosec // cache root is internal and key-gated
+	if err != nil {
+		return CachedGenerated{}, false
+	}
+
+	return CachedGenerated{
+		ModGenerated:      modFile,
+		MainFileFormatted: mainFile,
+	}, true
 }

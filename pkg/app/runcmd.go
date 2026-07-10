@@ -29,9 +29,21 @@ func RunCmd(o RunOpts) error {
 		return fmt.Errorf("read %s: %w", o.Script, err)
 	}
 
-	// The print flags are inspect-only: parse and generate are always needed
-	// for them, so handle this branch before the cache check.
+	cacheRoot, err := fs.NewCacheRoot()
+	if err != nil {
+		return fmt.Errorf("cache root: %w", err)
+	}
+
+	appKey := fs.GenerateAppKey(absPath, source)
+
+	// The print flags are inspect-only. On a cache hit, print directly from
+	// cached generated files; otherwise parse and generate in-memory.
 	if o.PrintGen || o.PrintMod || o.PrintMain {
+		if cached, ok := cacheRoot.CachedGeneratedFiles(appKey); ok {
+			printCachedArtifacts(o, cached)
+			return nil
+		}
+
 		script, parseErr := gornparser.ParseSource(pathLabel, source)
 		if parseErr != nil {
 			return fmt.Errorf("parse %s: %w", o.Script, parseErr)
@@ -43,13 +55,6 @@ func RunCmd(o RunOpts) error {
 		printArtifacts(o, gen)
 		return nil
 	}
-
-	cacheRoot, err := fs.NewCacheRoot()
-	if err != nil {
-		return fmt.Errorf("cache root: %w", err)
-	}
-
-	appKey := fs.GenerateAppKey(absPath, source)
 
 	// Fast path: binary already cached and valid — skip parse and generate.
 	if bin, ok := cacheRoot.CachedBin(appKey); ok {
@@ -128,6 +133,14 @@ func execCmd(bin string, o RunOpts) error {
 // than one is requested it prefixes headers; a single artifact is emitted raw
 // so it stays pipeable.
 func printArtifacts(o RunOpts, gen *gornparser.Generated) {
+	printArtifactsBytes(o, gen.ModGenerated, gen.MainFileFormatted)
+}
+
+func printCachedArtifacts(o RunOpts, cached fs.CachedGenerated) {
+	printArtifactsBytes(o, cached.ModGenerated, cached.MainFileFormatted)
+}
+
+func printArtifactsBytes(o RunOpts, modGenerated, mainFileFormatted []byte) {
 	printMod := o.PrintGen || o.PrintMod
 	printMain := o.PrintGen || o.PrintMain
 	withHeaders := printMod && printMain
@@ -136,13 +149,13 @@ func printArtifacts(o RunOpts, gen *gornparser.Generated) {
 		if withHeaders {
 			_, _ = fmt.Fprintln(o.Stdout, "// --- go.mod ---")
 		}
-		_, _ = fmt.Fprint(o.Stdout, string(gen.ModGenerated))
+		_, _ = fmt.Fprint(o.Stdout, string(modGenerated))
 	}
 	if printMain {
 		if withHeaders {
 			_, _ = fmt.Fprintln(o.Stdout, "// --- main.go ---")
 		}
-		_, _ = fmt.Fprint(o.Stdout, string(gen.MainFileFormatted))
+		_, _ = fmt.Fprint(o.Stdout, string(mainFileFormatted))
 	}
 }
 
