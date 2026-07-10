@@ -40,7 +40,7 @@ func RunCmd(o RunOpts) error {
 	// cached generated files; otherwise parse and generate in-memory.
 	if o.PrintGen || o.PrintMod || o.PrintMain {
 		if cached, ok := cacheRoot.CachedGeneratedFiles(appKey); ok {
-			printCachedArtifacts(o, cached)
+			printArtifactsFromBytes(o, cached.ModGenerated, cached.MainFileFormatted)
 			return nil
 		}
 
@@ -134,10 +134,6 @@ func execCmd(bin string, o RunOpts) error {
 // so it stays pipeable.
 func printArtifacts(o RunOpts, gen *gornparser.Generated) {
 	printArtifactsFromBytes(o, gen.ModGenerated, gen.MainFileFormatted)
-}
-
-func printCachedArtifacts(o RunOpts, cached fs.CachedGenerated) {
-	printArtifactsFromBytes(o, cached.ModGenerated, cached.MainFileFormatted)
 }
 
 func printArtifactsFromBytes(o RunOpts, modGenerated, mainFileFormatted []byte) {
