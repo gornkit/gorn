@@ -133,14 +133,14 @@ func execCmd(bin string, o RunOpts) error {
 // than one is requested it prefixes headers; a single artifact is emitted raw
 // so it stays pipeable.
 func printArtifacts(o RunOpts, gen *gornparser.Generated) {
-	printArtifactsBytes(o, gen.ModGenerated, gen.MainFileFormatted)
+	printArtifactsFromBytes(o, gen.ModGenerated, gen.MainFileFormatted)
 }
 
 func printCachedArtifacts(o RunOpts, cached fs.CachedGenerated) {
-	printArtifactsBytes(o, cached.ModGenerated, cached.MainFileFormatted)
+	printArtifactsFromBytes(o, cached.ModGenerated, cached.MainFileFormatted)
 }
 
-func printArtifactsBytes(o RunOpts, modGenerated, mainFileFormatted []byte) {
+func printArtifactsFromBytes(o RunOpts, modGenerated, mainFileFormatted []byte) {
 	printMod := o.PrintGen || o.PrintMod
 	printMain := o.PrintGen || o.PrintMain
 	withHeaders := printMod && printMain
