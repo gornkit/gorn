@@ -29,45 +29,17 @@ func RunCmd(o RunOpts) error {
 		return fmt.Errorf("read %s: %w", o.Script, err)
 	}
 
-	script, err := gornparser.ParseSource(pathLabel, source)
-	if err != nil {
-		return fmt.Errorf("parse %s: %w", o.Script, err)
-	}
-
-	if o.Verbose {
-		_, _ = fmt.Fprintln(o.Stderr, "--- invocation ---")
-		_, _ = fmt.Fprintf(o.Stderr, "Script: %s\n", o.Script)
-		_, _ = fmt.Fprintf(o.Stderr, "Args:   %v\n", o.Args)
-		flags := []string{}
-		if o.PrintGen {
-			flags = append(flags, "--print-gen")
-		}
-		if o.PrintMod {
-			flags = append(flags, "--print-mod")
-		}
-		if o.PrintMain {
-			flags = append(flags, "--print-main")
-		}
-		_, _ = fmt.Fprintf(o.Stderr, "Flags:  %v\n", flags)
-		script.Dump(o.Stderr)
-	}
-
-	// Generation is the validation step: always generate so an invalid script
-	// (e.g. a preamble import conflict) is surfaced, even for a plain run.
-	gen, err := gornparser.Generate(script)
-	if err != nil {
-		// A format failure carries the raw, unformatted main file; dump it to
-		// stderr for debugging before surfacing the error.
-		var genErr *gornparser.GenerateError
-		if errors.As(err, &genErr) && genErr.Raw != nil {
-			_, _ = fmt.Fprintln(o.Stderr, "--- generated main.go (unformatted) ---")
-			_, _ = fmt.Fprint(o.Stderr, string(genErr.Raw))
-		}
-		return fmt.Errorf("generate: %w", err)
-	}
-
-	// The print flags are inspect-only: print and do not run.
+	// The print flags are inspect-only: parse and generate are always needed
+	// for them, so handle this branch before the cache check.
 	if o.PrintGen || o.PrintMod || o.PrintMain {
+		script, parseErr := gornparser.ParseSource(pathLabel, source)
+		if parseErr != nil {
+			return fmt.Errorf("parse %s: %w", o.Script, parseErr)
+		}
+		gen, genErr := generateSource(o, script)
+		if genErr != nil {
+			return genErr
+		}
 		printArtifacts(o, gen)
 		return nil
 	}
@@ -79,7 +51,7 @@ func RunCmd(o RunOpts) error {
 
 	appKey := fs.GenerateAppKey(absPath, source)
 
-	// Fast path: binary already cached and valid.
+	// Fast path: binary already cached and valid — skip parse and generate.
 	if bin, ok := cacheRoot.CachedBin(appKey); ok {
 		return execCmd(bin, o)
 	}
@@ -97,12 +69,46 @@ func RunCmd(o RunOpts) error {
 		return execCmd(bin, o)
 	}
 
+	// Cache miss: parse and generate are deferred to here to avoid the work
+	// on a cache hit.
+	script, err := gornparser.ParseSource(pathLabel, source)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", o.Script, err)
+	}
+
+	if o.Verbose {
+		_, _ = fmt.Fprintln(o.Stderr, "--- invocation ---")
+		_, _ = fmt.Fprintf(o.Stderr, "Script: %s\n", o.Script)
+		_, _ = fmt.Fprintf(o.Stderr, "Args:   %v\n", o.Args)
+		script.Dump(o.Stderr)
+	}
+
+	gen, err := generateSource(o, script)
+	if err != nil {
+		return err
+	}
+
 	emitted, err := fs.Emit(cacheRoot, script, gen, appKey)
 	if err != nil {
 		return fmt.Errorf("emit: %w", err)
 	}
 
 	return execCmd(emitted.BinFile, o)
+}
+
+// generateSource runs gornparser.Generate, dumping the unformatted output to
+// stderr on a format failure before returning the error.
+func generateSource(o RunOpts, script *gornparser.Script) (*gornparser.Generated, error) {
+	gen, err := gornparser.Generate(script)
+	if err != nil {
+		var genErr *gornparser.GenerateError
+		if errors.As(err, &genErr) && genErr.Raw != nil {
+			_, _ = fmt.Fprintln(o.Stderr, "--- generated main.go (unformatted) ---")
+			_, _ = fmt.Fprint(o.Stderr, string(genErr.Raw))
+		}
+		return nil, fmt.Errorf("generate: %w", err)
+	}
+	return gen, nil
 }
 
 // execCmd runs the compiled binary, forwarding stdout/stderr from o and
@@ -141,15 +147,15 @@ func printArtifacts(o RunOpts, gen *gornparser.Generated) {
 }
 
 // readSource reads the script source bytes and returns them along with:
-//   - pathLabel: the label to use for parse error messages ("-" for stdin)
-//   - absPath: the absolute path used to generate the app cache key ("-" for stdin)
+//   - pathLabel: the label to use for parse error messages
+//   - absPath: the absolute path used to generate the app cache key
 func readSource(path string) (source []byte, pathLabel, absPath string, err error) {
 	if path == "-" {
 		data, readErr := io.ReadAll(os.Stdin)
 		if readErr != nil {
 			return nil, "", "", readErr
 		}
-		return data, "-", "-", nil
+		return data, "/dev/stdin", "/dev/stdin", nil
 	}
 
 	abs, absErr := filepath.Abs(path)
