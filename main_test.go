@@ -122,6 +122,8 @@ func TestRunCLIVerboseAppliesToRunAndShorthand(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping full build in short mode")
 	}
+	// Isolate cache per invocation to avoid test-order dependence: verbose output
+	// differs on cache miss vs hit because parse/dump is skipped on valid hits.
 	t.Setenv("GORN_CACHE", t.TempDir())
 	explicit := runCLIForTest(t, "--verbose", "run", "testdata/no_package.gorn")
 	t.Setenv("GORN_CACHE", t.TempDir())
@@ -270,7 +272,7 @@ func TestRunCLIPrintMainUsesCachedGeneratedFileOnHit(t *testing.T) {
 	root := fs.CacheRoot(cacheDir)
 
 	const sentinel = "// cached-print-sentinel\n"
-	if err := os.WriteFile(root.AppMainFile(appKey), []byte(sentinel), 0o600); err != nil {
+	if err := os.WriteFile(root.AppMainFile(appKey), []byte(sentinel), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

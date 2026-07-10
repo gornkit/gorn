@@ -101,7 +101,9 @@ func (c CacheRoot) CachedBin(appKey AppKey) (string, bool) {
 
 // CachedGenerated holds cached generated source files from a valid app slot.
 type CachedGenerated struct {
+	// ModGenerated is the cached go.mod content.
 	ModGenerated      []byte
+	// MainFileFormatted is the cached main.gorn.go content.
 	MainFileFormatted []byte
 }
 
