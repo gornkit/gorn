@@ -20,6 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash # consistent arg parsing across OSes (Windows defaults to pwsh)
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +32,6 @@ jobs:
 
       - name: Resolve Go cache paths
         id: gocache
-        shell: bash
         run: |
           echo "mod=$(go env GOMODCACHE)" >>"$GITHUB_OUTPUT"
           echo "build=$(go env GOCACHE)" >>"$GITHUB_OUTPUT"
@@ -54,7 +56,6 @@ jobs:
 
       - name: Coverage summary
         if: matrix.os == 'ubuntu-latest'
-        shell: bash
         run: |
           {
             echo '### Coverage'
