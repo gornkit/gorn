@@ -7,8 +7,11 @@
 
 ## Status
 
-Pre-alpha. The `sh` package has a usable shell-exec v0; the runner is not
-usable yet.
+Pre-alpha, but the runner works end to end: `gorn run <script>` (or the
+`gorn <script>` shorthand) parses the script, generates a module, builds it
+with the Go toolchain, caches the binary keyed on a content hash, and runs it,
+forwarding args. The `sh` package has a usable shell-exec v0. The separate
+`gorn build` and `gorn cache` subcommands are still stubs.
 
 ## `sh` package
 
@@ -46,15 +49,24 @@ mise trust && mise install
 
 See [`AGENTS.md`](./AGENTS.md) for build/lint/test commands and conventions.
 
-Current CLI skeleton:
+Current CLI:
 
 ```sh
-gorn <script.go> [-- args...]      # shorthand for run
-gorn run <script.go> [-- args...]
-gorn build
-gorn cache
+gorn <script.gorn> [-- args...]        # shorthand for run
+gorn run [flags] <script.gorn> [-- args...]
+gorn build                             # stub (not implemented)
+gorn cache                             # stub (not implemented)
 gorn --version
+
+# run flags:
+#   --print-mod     print the generated go.mod, then exit (does not run)
+#   --print-main    print the generated main.go, then exit (does not run)
+#   --no-cache      build fresh and bypass the cache
+#   -v, --verbose   diagnostics on stderr
 ```
+
+The build cache lives under `$GORN_CACHE` (falling back to the user cache dir,
+then a temp dir).
 
 ## Writing scripts
 

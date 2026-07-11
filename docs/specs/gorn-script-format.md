@@ -7,11 +7,10 @@ Where this spec and [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md) div
 
 Read this section first; it sets expectations for the rest of the document.
 
-- **Implemented and tested:** the `.gorn` source file format below (shebang, directives, the package/main split, every parse error) plus **code generation** — turning a parsed `Script` into a `go.mod` and a formatted `main.go`. Both live in `pkg/gornparser` and are covered by tests, including a test that compiles generated output.
-- **Wired into the CLI, partially:** `gorn run <script>` parses the script and dumps the parsed `Script`; with `--print-gen` it also generates and prints the `go.mod` and `main.go`. It does **not** yet build or execute the generated module.
-- **Not yet implemented:** the build/run pipeline (compiling and running generated code), `gorn build`/`gorn cache` (stubs returning "not implemented"), `gorn eject`, fragments/includes (`.gfrag`), and directives such as `//gorn:replace`, `//gorn:fragment`, `//gorn:include`.
+- **Implemented and tested:** the `.gorn` source file format below (shebang, directives, the package/main split, every parse error), **code generation** — turning a parsed `Script` into a `go.mod` and a formatted `main.go` (both in `pkg/gornparser`) — and the **build/run pipeline**. `gorn run <script>` (and the `gorn <script>` shorthand) parses, generates, builds the module with the Go toolchain, caches the built binary keyed on a content hash, and executes it, forwarding script args. `--print-mod`/`--print-main` print the generated artifacts and exit without running; `--no-cache` builds fresh and bypasses the cache; `--verbose` adds stderr diagnostics (including a `cache: hit/miss/bypass` line).
+- **Not yet implemented:** `gorn build`/`gorn cache` (stubs returning "not implemented"), `gorn eject`, fragments/includes (`.gfrag`) and their directives (`//gorn:fragment`, `//gorn:include`), and `//gorn:replace`.
 
-In short: Gorn can parse a `.gorn` file and generate the Go module for it, but does not yet compile or run that module.
+In short: Gorn parses, generates, builds, caches, and runs a `.gorn` file today; the subcommands and fragment/eject features above are still aspirational.
 
 ## Overview
 
@@ -252,11 +251,9 @@ Fails with `ErrEmptyMain` at line 1 — there is nothing to run.
 
 The following are part of the longer-term design (see [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md)) but do not exist in the codebase today:
 
-- Building and running the generated module — `gorn run` generates (with `--print-gen`) but does not compile or execute.
-- The `gorn build`/`gorn cache` commands (currently stubs returning "not implemented").
+- The `gorn build`/`gorn cache` commands (currently stubs returning "not implemented"). Note: `gorn run` already builds and caches; these separate subcommands are not wired up.
 - `gorn eject` — converting a `.gorn` file into a normal Go module.
 - Fragments/includes (`.gfrag` files) and their directives (`//gorn:fragment`, `//gorn:include`).
 - `//gorn:replace`.
-- Build caching semantics and cache invalidation.
 
 Treat any of the above as aspirational until this document (or a successor) is updated to say otherwise.
