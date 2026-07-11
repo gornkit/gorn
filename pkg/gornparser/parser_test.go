@@ -26,7 +26,7 @@ func TestParseSourceParsesScriptMetadataAndSections(t *testing.T) {
 		"\n" +
 		"fmt.Println(hasTodo(\"README.md\"))\n")
 
-	script, err := gornparser.ParseSource("todo.gorn", source)
+	script, err := parseSource("todo.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestParseSourceTracksSectionStartLines(t *testing.T) {
 		"//gorn:main\n" +
 		"fmt.Println(\"hello\")\n")
 
-	script, err := gornparser.ParseSource("hello.gorn", source)
+	script, err := parseSource("hello.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestParseSourceDropsLeadingBlanksAfterMain(t *testing.T) {
 		"\n" +
 		"fmt.Println(\"hello\")\n")
 
-	script, err := gornparser.ParseSource("blank-main.gorn", source)
+	script, err := parseSource("blank-main.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestParseSourceAllowsShebangOnlyOnFirstLine(t *testing.T) {
 	source := []byte("//gorn:main\n" +
 		"#! this is main source, not a shebang\n")
 
-	script, err := gornparser.ParseSource("shebang.gorn", source)
+	script, err := parseSource("shebang.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,11 +137,6 @@ func TestParseSourceRejectsInvalidScripts(t *testing.T) {
 		wantErr  error
 		wantLine int
 	}{
-		{
-			name:    "empty script",
-			source:  "",
-			wantErr: gornparser.ErrEmptyScript,
-		},
 		{
 			name:     "missing main",
 			source:   "import \"fmt\"\n",
@@ -224,7 +219,7 @@ func TestParseSourceRejectsInvalidScripts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := gornparser.ParseSource("bad.gorn", []byte(tt.source))
+			_, err := parseSource("bad.gorn", []byte(tt.source))
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("error = %v, want errors.Is(_, %v)", err, tt.wantErr)
 			}
@@ -253,7 +248,7 @@ func TestParseSourceAllowsMultipleRequireDirectives(t *testing.T) {
 		"//gorn:main\n" +
 		"println(\"hello\")\n")
 
-	script, err := gornparser.ParseSource("multi-require.gorn", source)
+	script, err := parseSource("multi-require.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +267,7 @@ func TestParseSourceParsesPreambleDirective(t *testing.T) {
 		"//gorn:main\n" +
 		"println(\"hi\")\n")
 
-	script, err := gornparser.ParseSource("preamble.gorn", source)
+	script, err := parseSource("preamble.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +281,7 @@ func TestParseSourceRejectsPreambleWithArgs(t *testing.T) {
 		"//gorn:main\n" +
 		"println(\"hi\")\n")
 
-	_, err := gornparser.ParseSource("preamble.gorn", source)
+	_, err := parseSource("preamble.gorn", source)
 	if !errors.Is(err, gornparser.ErrInvalidDirective) {
 		t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrInvalidDirective)
 	}
@@ -302,7 +297,7 @@ func TestParseSourceAllowsBlankLinesBetweenDirectives(t *testing.T) {
 		"//gorn:main\n" +
 		"fmt.Println()\n")
 
-	script, err := gornparser.ParseSource("blank-spacing.gorn", source)
+	script, err := parseSource("blank-spacing.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +321,7 @@ func TestParseSourceStillRejectsDirectiveAfterRealContentDespiteBlanks(t *testin
 		"//gorn:require github.com/example/tool v1.0.0\n" +
 		"//gorn:main\n")
 
-	_, err := gornparser.ParseSource("bad.gorn", source)
+	_, err := parseSource("bad.gorn", source)
 	if !errors.Is(err, gornparser.ErrDirectiveAfterPackage) {
 		t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrDirectiveAfterPackage)
 	}
@@ -361,7 +356,7 @@ func TestParseSourceRequiresExactDirectiveNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := gornparser.ParseSource("bad.gorn", []byte(tt.source))
+			_, err := parseSource("bad.gorn", []byte(tt.source))
 			if !errors.Is(err, gornparser.ErrInvalidDirective) {
 				t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrInvalidDirective)
 			}

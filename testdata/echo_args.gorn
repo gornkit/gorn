@@ -1,0 +1,17 @@
+#!/usr/bin/env gorn
+//gorn:go 1.26
+
+// Package section (no //gorn:preamble): an explicit import lands at file scope.
+import "os"
+
+//gorn:main
+
+// Echoes the arguments passed after the script; expects one or more.
+args := os.Args[1:]
+if len(args) == 0 {
+	println("usage: pass one or more args")
+	os.Exit(2)
+}
+for i, arg := range args {
+	println(i, arg)
+}

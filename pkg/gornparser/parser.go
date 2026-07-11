@@ -6,13 +6,13 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	so "github.com/gornkit/gorn/pkg/source"
 )
 
 type ParserError string
 
 const (
-	ErrFailedToReadFile       ParserError = "failed to read file"
-	ErrEmptyScript            ParserError = "empty script"
 	ErrMissingMain            ParserError = "missing //gorn:main directive"
 	ErrMultipleMain           ParserError = "multiple //gorn:main directives"
 	ErrDirectiveAfterMain     ParserError = "gorn directive after //gorn:main"
@@ -127,18 +127,16 @@ type state struct {
 	script            *Script
 }
 
-func ParseSource(path string, source []byte) (*Script, error) {
-	if len(source) == 0 {
-		return nil, ErrEmptyScript
-	}
+func ParseSource(s *so.Source) (*Script, error) {
+	data := s.Data()
 
 	state := &state{
 		script: &Script{
-			SourcePath: path,
+			SourcePath: s.Path(),
 		},
 	}
 
-	for line := range bytes.Lines(source) {
+	for line := range bytes.Lines(data) {
 		state.currLine++
 		// Shebang handling is intentionally permissive: any line 1 prefixed
 		// with "#!" is treated as a shebang and discarded verbatim. Gorn

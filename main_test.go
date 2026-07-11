@@ -85,22 +85,22 @@ func TestRunCLIHelp(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", run.code)
 	}
 	usage := usageLine(run.stdout)
-	for _, token := range []string{"--print-gen", "script", "args"} {
+	for _, token := range []string{"--print-mod", "script", "args"} {
 		if !strings.Contains(usage, token) {
 			t.Fatalf("usage %q missing %q", usage, token)
 		}
 	}
-	if strings.Index(usage, "--print-gen") > strings.Index(usage, "script") {
+	if strings.Index(usage, "--print-mod") > strings.Index(usage, "script") {
 		t.Fatalf("flag appears after args in usage: %q", usage)
 	}
 }
 
 // TestRunCLIExplicitAndShorthandRunMatch checks that `gorn run x` and the
-// shorthand `gorn x` dispatch identically (both currently print the
-// not-implemented notice on stderr, nothing on stdout).
+// shorthand `gorn x` dispatch identically. Uses --print-main so the check
+// covers dispatch/flag routing without depending on a real toolchain build.
 func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
-	explicit := runCLIForTest(t, "run", "testdata/clean.gorn", "--", "--flag")
-	shorthand := runCLIForTest(t, "testdata/clean.gorn", "--", "--flag")
+	explicit := runCLIForTest(t, "run", "--print-main", "testdata/run_hello.gorn", "--", "--flag")
+	shorthand := runCLIForTest(t, "--print-main", "testdata/run_hello.gorn", "--", "--flag")
 	if explicit.err != nil {
 		t.Fatal(explicit.err)
 	}
@@ -114,9 +114,9 @@ func TestRunCLIExplicitAndShorthandRunMatch(t *testing.T) {
 }
 
 func TestRunCLIVerboseAppliesToRunAndShorthand(t *testing.T) {
-	explicit := runCLIForTest(t, "--verbose", "run", "testdata/clean.gorn")
-	shorthand := runCLIForTest(t, "--verbose", "testdata/clean.gorn")
-	plain := runCLIForTest(t, "run", "testdata/clean.gorn")
+	explicit := runCLIForTest(t, "--verbose", "run", "--print-main", "testdata/clean.gorn")
+	shorthand := runCLIForTest(t, "--verbose", "--print-main", "testdata/clean.gorn")
+	plain := runCLIForTest(t, "run", "--print-main", "testdata/clean.gorn")
 	for _, r := range []runResult{explicit, shorthand, plain} {
 		if r.err != nil {
 			t.Fatal(r.err)
@@ -128,18 +128,18 @@ func TestRunCLIVerboseAppliesToRunAndShorthand(t *testing.T) {
 	if explicit.stderr == plain.stderr {
 		t.Fatalf("verbose stderr matched plain stderr:\n%s", explicit.stderr)
 	}
-	if !strings.Contains(explicit.stderr, "--- parsed script ---") {
+	if !strings.Contains(explicit.stderr, "--- invocation ---") {
 		t.Fatalf("verbose stderr missing dump:\n%s", explicit.stderr)
 	}
 }
 
 // TestRunCLIVerboseUsesShortAlias confirms -v is accepted for --verbose.
 func TestRunCLIVerboseUsesShortAlias(t *testing.T) {
-	got := runCLIForTest(t, "-v", "testdata/clean.gorn")
+	got := runCLIForTest(t, "-v", "--print-main", "testdata/clean.gorn")
 	if got.err != nil {
 		t.Fatal(got.err)
 	}
-	if !strings.Contains(got.stderr, "--- parsed script ---") {
+	if !strings.Contains(got.stderr, "--- invocation ---") {
 		t.Fatalf("-v did not enable verbose dump:\n%s", got.stderr)
 	}
 }
@@ -202,16 +202,16 @@ func TestRunCLIPrintMainEmitsRawMain(t *testing.T) {
 	}
 }
 
-func TestRunCLIPrintGenEmitsBothWithHeaders(t *testing.T) {
-	got := runCLIForTest(t, "run", "--print-gen", "testdata/clean.gorn")
+func TestRunCLIPrintModAndMainEmitBothWithHeaders(t *testing.T) {
+	got := runCLIForTest(t, "run", "--print-mod", "--print-main", "testdata/clean.gorn")
 	if got.err != nil {
 		t.Fatal(got.err)
 	}
 	if !strings.Contains(got.stdout, "// --- go.mod ---") || !strings.Contains(got.stdout, "// --- main.go ---") {
-		t.Fatalf("--print-gen missing headers:\n%s", got.stdout)
+		t.Fatalf("--print-mod --print-main missing headers:\n%s", got.stdout)
 	}
 	if !strings.Contains(got.stdout, "module ") || !strings.Contains(got.stdout, "package main") {
-		t.Fatalf("--print-gen missing go.mod or main.go content:\n%s", got.stdout)
+		t.Fatalf("--print-mod --print-main missing go.mod or main.go content:\n%s", got.stdout)
 	}
 }
 

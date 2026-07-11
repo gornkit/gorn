@@ -21,7 +21,6 @@ type Common struct {
 }
 
 type RunCmd struct {
-	PrintGen  bool     `arg:"--print-gen" help:"Print generated go.mod and main.go, then exit (does not run)"`
 	PrintMod  bool     `arg:"--print-mod" help:"Print the generated go.mod, then exit (does not run)"`
 	PrintMain bool     `arg:"--print-main" help:"Print the generated main.go, then exit (does not run)"`
 	NoCache   bool     `arg:"--no-cache" help:"Bypass any cached app output"`
@@ -142,7 +141,6 @@ func (r *RunCmd) Run(common *Common, stdout, stderr io.Writer) error {
 		Stdout:     stdout,
 		Stderr:     stderr,
 		Verbose:    common.Verbose,
-		PrintGen:   r.PrintGen,
 		PrintMod:   r.PrintMod,
 		PrintMain:  r.PrintMain,
 		NoCache:    r.NoCache,

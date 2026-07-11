@@ -23,7 +23,7 @@ func TestGenerateProducesModuleAndFormattedMain(t *testing.T) {
 		"fmt.Println(\"hello\")\n" +
 		"sh.Host()\n")
 
-	script, err := gornparser.ParseSource("hello.gorn", source)
+	script, err := parseSource("hello.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestGenerateDefaultsModuleWhenOmitted(t *testing.T) {
 		"//gorn:main\n" +
 		"println(\"hello\")\n")
 
-	script, err := gornparser.ParseSource("hash.gorn", source)
+	script, err := parseSource("hash.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestGenerateDefaultsGoVersionWhenOmitted(t *testing.T) {
 	source := []byte("//gorn:main\n" +
 		"println(\"hello\")\n")
 
-	script, err := gornparser.ParseSource("no-go-version.gorn", source)
+	script, err := parseSource("no-go-version.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestGenerateReturnsRawMainWhenFormattingFails(t *testing.T) {
 		"//gorn:main\n" +
 		"if {\n")
 
-	script, err := gornparser.ParseSource("bad-go.gorn", source)
+	script, err := parseSource("bad-go.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestGenerateRejectsPreambleImportConflict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script, err := gornparser.ParseSource("conflict.gorn", []byte(tt.source))
+			script, err := parseSource("conflict.gorn", []byte(tt.source))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -199,7 +199,7 @@ func TestGenerateAllowsNonPreambleImportsWithPreamble(t *testing.T) {
 		"//gorn:main\n" +
 		"tool.Do()\n")
 
-	script, err := gornparser.ParseSource("ok.gorn", source)
+	script, err := parseSource("ok.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestGenerateSkipsConflictCheckWithoutPreamble(t *testing.T) {
 		"//gorn:main\n" +
 		"fmt.Println()\n")
 
-	script, err := gornparser.ParseSource("no-preamble.gorn", source)
+	script, err := parseSource("no-preamble.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestGeneratePreambleOutputCompiles(t *testing.T) {
 		"//gorn:main\n" +
 		"println(\"no preamble packages used directly\")\n")
 
-	script, err := gornparser.ParseSource("compile.gorn", source)
+	script, err := parseSource("compile.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
