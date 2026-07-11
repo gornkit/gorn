@@ -1,6 +1,13 @@
+---
+title: Gorn Script Format Specification
+status: authoritative
+type: spec
+updated: 2026-07-11
+summary: The .gorn script file format — shebang, directives, the package/main split — and the code generation it drives.
+---
+
 # Gorn Script Format Specification
 
-Status: reflects the current implementation in [`pkg/gornparser`](../../pkg/gornparser/) (`parser.go` and `generator.go`), which is tested.
 Where this spec and [`docs/archive/GORN_DESIGN.md`](../archive/GORN_DESIGN.md) diverge, this document and the implementation are authoritative — `docs/archive/` holds historical/reference design notes only.
 
 ## Implementation status

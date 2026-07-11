@@ -1,3 +1,11 @@
+---
+title: Gorn Design Notes
+status: archived
+type: design
+updated: 2026-07-01
+summary: Original overall design and non-goals for the Gorn file-app runner.
+---
+
 # Gorn Design Notes
 
 **Gorn** is a Go file-app runner for portable automation scripts.

@@ -1,3 +1,11 @@
+---
+title: Gorn Implementation Plan
+status: archived
+type: plan
+updated: 2026-07-01
+summary: Original build-order plan for shipping one-file .gorn scripts before richer tooling.
+---
+
 # Gorn Implementation Plan
 
 This plan is intentionally small. The priority is to make one-file `.gorn` scripts run reliably before adding fragments, import inference, interactive shell behavior, or richer tooling.

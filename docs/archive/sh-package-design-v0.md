@@ -1,8 +1,14 @@
+---
+title: Gorn sh Package Design — v0 Shell-First API
+status: archived
+type: design
+updated: 2026-07-02
+summary: v0 shell-first API design for the sh helper package.
+---
+
 # Gorn `sh` Package Design — v0 Shell-First API
 
-**Project:** Gorn  
 **Package:** `github.com/gornkit/gorn/sh`  
-**Status:** Draft design note  
 **Design center:** Start tiny, honest, shell-first, and extensible.
 
 ---

@@ -39,3 +39,21 @@ Mise tasks are inline in `.config/mise.toml`. If you add more, either keep them 
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc.). Prefer a single commit per logical change over splitting scaffolding into many small ones.
 - User style (`@trippwill`): buildable commits, small reviewable slices, no
   half-baked feature branches pushed. Pushing requires explicit sign-off.
+
+## Docs
+
+Every Markdown file under `docs/` starts with YAML frontmatter (agent-instruction
+files like `docs/archive/AGENTS.md` are exempt — they are not docs):
+
+```yaml
+---
+title: <human title>
+status: authoritative | archived   # also: draft, deprecated
+type: spec | design | plan
+updated: YYYY-MM-DD                 # last substantive content change
+summary: <one-line description>
+---
+```
+
+`docs/specs/*` are authoritative; `docs/archive/*` are frozen historical
+references. Bump `updated` when you change a doc's content.
