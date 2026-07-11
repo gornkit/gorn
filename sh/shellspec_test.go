@@ -3,6 +3,7 @@ package sh
 import (
 	"bytes"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -95,6 +96,13 @@ func TestCommandIOEnvAndDir(t *testing.T) {
 	requireBash(t)
 
 	dir := t.TempDir()
+	// The shell's pwd reports the symlink-resolved path (e.g. macOS maps
+	// /var -> /private/var), while t.TempDir() does not, so compare against
+	// the resolved form.
+	wantDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var stdout, stderr bytes.Buffer
 
 	got := Bash().
@@ -109,7 +117,7 @@ func TestCommandIOEnvAndDir(t *testing.T) {
 	if !got.OK() {
 		t.Fatalf("Exec() failed: code %d, err %v", got.Code(), got.Error())
 	}
-	if stdout.String() != "out:stdin:env:"+dir {
+	if stdout.String() != "out:stdin:env:"+wantDir {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if stderr.String() != "err:stdin" {
