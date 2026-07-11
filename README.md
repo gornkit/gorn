@@ -35,9 +35,9 @@ globbing, and file helpers are future work.
 ## Design
 
 - [`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) — the `.gorn` script format, as currently implemented (authoritative).
-- [`project/GORN_DESIGN.md`](project/GORN_DESIGN.md) — overall design and non-goals (historical/reference).
-- [`project/sh-package-design-v0.md`](project/sh-package-design-v0.md) — the `sh` helper package (historical/reference).
-- [`project/IMPLEMENTATION_PLAN.md`](project/IMPLEMENTATION_PLAN.md) — build order (historical/reference).
+- [`docs/archive/GORN_DESIGN.md`](docs/archive/GORN_DESIGN.md) — overall design and non-goals (historical/reference).
+- [`docs/archive/sh-package-design-v0.md`](docs/archive/sh-package-design-v0.md) — the `sh` helper package (historical/reference).
+- [`docs/archive/IMPLEMENTATION_PLAN.md`](docs/archive/IMPLEMENTATION_PLAN.md) — build order (historical/reference).
 
 ## Development
 

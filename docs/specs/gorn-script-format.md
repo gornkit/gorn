@@ -1,7 +1,7 @@
 # Gorn Script Format Specification
 
 Status: reflects the current implementation in [`pkg/gornparser`](../../pkg/gornparser/) (`parser.go` and `generator.go`), which is tested.
-Where this spec and [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md) diverge, this document and the implementation are authoritative — `project/` holds historical/reference design notes only.
+Where this spec and [`docs/archive/GORN_DESIGN.md`](../archive/GORN_DESIGN.md) diverge, this document and the implementation are authoritative — `docs/archive/` holds historical/reference design notes only.
 
 ## Implementation status
 
@@ -249,7 +249,7 @@ Fails with `ErrEmptyMain` at line 1 — there is nothing to run.
 
 ## Not yet implemented
 
-The following are part of the longer-term design (see [`project/GORN_DESIGN.md`](../../project/GORN_DESIGN.md)) but do not exist in the codebase today:
+The following are part of the longer-term design (see [`docs/archive/GORN_DESIGN.md`](../archive/GORN_DESIGN.md)) but do not exist in the codebase today:
 
 - The `gorn build`/`gorn cache` commands (currently stubs returning "not implemented"). Note: `gorn run` already builds and caches; these separate subcommands are not wired up.
 - `gorn eject` — converting a `.gorn` file into a normal Go module.
