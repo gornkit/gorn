@@ -1,4 +1,4 @@
-package source
+package app
 
 import (
 	"crypto/sha256"
@@ -9,8 +9,8 @@ import (
 
 const cacheVersion byte = 1
 
-// AppKey is the hex SHA-256 cache key identifying a unique build of a script.
-type AppKey string
+// Key is the hex SHA-256 cache key identifying a unique build of a script.
+type Key string
 
 type keyInputs struct {
 	cacheVersion byte
@@ -21,10 +21,10 @@ type keyInputs struct {
 	source       []byte
 }
 
-// GenerateAppKey derives the cache key for a script from its absolute path and
+// NewKey derives the cache key for a script from its absolute path and
 // bytes, plus the Go version and target GOOS/GOARCH, so any change that affects
 // the built binary forces a cache miss.
-func GenerateAppKey(absPath string, source []byte) AppKey {
+func NewKey(absPath string, source []byte) Key {
 	inputs := keyInputs{
 		cacheVersion: cacheVersion,
 		goversion:    runtime.Version(),
@@ -33,7 +33,7 @@ func GenerateAppKey(absPath string, source []byte) AppKey {
 		goos:         runtime.GOOS,
 		goarch:       runtime.GOARCH,
 	}
-	return AppKey(hashStruct(inputs))
+	return Key(hashStruct(inputs))
 }
 
 func hashStruct(inputs keyInputs) string {

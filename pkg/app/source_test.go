@@ -1,4 +1,4 @@
-package source
+package app
 
 import (
 	"errors"
@@ -38,7 +38,7 @@ func TestNewValidates(t *testing.T) {
 	if s.Path() != "/dev/stdin" {
 		t.Fatalf("stdin path = %q, want /dev/stdin", s.Path())
 	}
-	if s.AppKey() == "" {
-		t.Fatal("AppKey not computed")
+	if s.Key() == "" {
+		t.Fatal("Key not computed")
 	}
 }

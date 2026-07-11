@@ -1,4 +1,4 @@
-package fs
+package cache
 
 import (
 	"fmt"
@@ -6,19 +6,19 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	gp "github.com/gornkit/gorn/pkg/gornparser"
-	so "github.com/gornkit/gorn/pkg/source"
+	"github.com/gornkit/gorn/pkg/app"
+	"github.com/gornkit/gorn/pkg/script"
 )
 
-// Emitted records the on-disk paths of a freshly installed cache entry.
-type Emitted struct {
+// Entry records the on-disk paths of a freshly installed cache entry.
+type Entry struct {
 	AppRoot      string
 	MainFilePath string
 	ModFilePath  string
 	AppPath      string
 }
 
-// Emit builds the generated app for s and returns its on-disk paths. It builds
+// Build builds the generated app for s and returns its on-disk paths. It builds
 // into a private temp dir. When noCache is false it installs the build into the
 // cache: writing the manifest last and atomically renaming the finished dir
 // into place, so a concurrent or interrupted run never sees a half-built entry.
@@ -27,11 +27,11 @@ type Emitted struct {
 // wins; a builder whose rename loses the race yields to the peer's
 // already-published, equivalent entry. When noCache is true it bypasses the
 // cache entirely — no manifest, no publish — and hands the temp build dir back
-// to the caller, who must fs.Clean it after running.
-func Emit(cacheRoot CacheRoot, s *so.Source, g *gp.Generated, noCache bool) (Emitted, error) {
-	result := Emitted{}
+// to the caller, who must call [Entry.Remove] after running.
+func (r Root) Build(s *app.Source, g *script.Generated, noCache bool) (Entry, error) {
+	result := Entry{}
 
-	tmpParent := cacheRoot.TmpDir()
+	tmpParent := r.TmpDir()
 	if err := os.MkdirAll(tmpParent, 0o700); err != nil {
 		return result, err
 	}
@@ -71,7 +71,7 @@ func Emit(cacheRoot CacheRoot, s *so.Source, g *gp.Generated, noCache bool) (Emi
 	}
 
 	if noCache {
-		// Bypass: run straight from the temp dir; caller fs.Cleans it.
+		// Bypass: run straight from the temp dir; caller calls Entry.Remove.
 		handoff = true
 		result.AppRoot = buildDir
 		result.MainFilePath = filepath.Join(buildDir, "main.gorn.go")
@@ -90,15 +90,15 @@ func Emit(cacheRoot CacheRoot, s *so.Source, g *gp.Generated, noCache bool) (Emi
 		return result, err
 	}
 
-	if err := cacheRoot.publish(buildDir, s); err != nil {
+	if err := r.publish(buildDir, s); err != nil {
 		return result, err
 	}
 
-	appRoot := cacheRoot.AppDir(s)
+	appRoot := r.Dir(s)
 	result.AppRoot = appRoot
 	result.MainFilePath = filepath.Join(appRoot, "main.gorn.go")
 	result.ModFilePath = filepath.Join(appRoot, "go.mod")
-	result.AppPath = cacheRoot.AppBinFile(s)
+	result.AppPath = r.BinPath(s)
 	return result, nil
 }
 
@@ -106,22 +106,22 @@ func Emit(cacheRoot CacheRoot, s *so.Source, g *gp.Generated, noCache bool) (Emi
 // rename is the publish point. If it fails but a valid entry for s already
 // exists, a peer published byte-identical content first, so we yield to theirs;
 // any other rename failure is a real install error.
-func (c CacheRoot) publish(buildDir string, s *so.Source) error {
-	appRoot := c.AppDir(s)
+func (c Root) publish(buildDir string, s *app.Source) error {
+	appRoot := c.Dir(s)
 	if err := os.MkdirAll(filepath.Dir(appRoot), 0o700); err != nil {
 		return err
 	}
 	if err := os.Rename(buildDir, appRoot); err != nil {
-		if _, ok := c.CachedBin(s); !ok {
+		if _, ok := c.Lookup(s); !ok {
 			return fmt.Errorf("install cache entry: %w", err)
 		}
 	}
 	return nil
 }
 
-// Clean removes the installed cache entry recorded in e. A zero Emitted is a
+// Remove removes the installed cache entry recorded in e. A zero Entry is a
 // no-op.
-func Clean(e Emitted) error {
+func (e Entry) Remove() error {
 	if e.AppRoot == "" {
 		return nil
 	}

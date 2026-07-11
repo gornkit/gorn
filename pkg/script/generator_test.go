@@ -1,4 +1,4 @@
-package gornparser_test
+package script_test
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gornkit/gorn/pkg/gornparser"
+	"github.com/gornkit/gorn/pkg/script"
 )
 
 func TestGenerateProducesModuleAndFormattedMain(t *testing.T) {
@@ -23,12 +23,12 @@ func TestGenerateProducesModuleAndFormattedMain(t *testing.T) {
 		"fmt.Println(\"hello\")\n" +
 		"sh.Host()\n")
 
-	script, err := parseSource("hello.gorn", source)
+	file, err := parseSource("hello.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	generated, err := gornparser.Generate(script)
+	generated, err := script.Generate(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +65,12 @@ func TestGenerateDefaultsModuleWhenOmitted(t *testing.T) {
 		"//gorn:main\n" +
 		"println(\"hello\")\n")
 
-	script, err := parseSource("hash.gorn", source)
+	file, err := parseSource("hash.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	generated, err := gornparser.Generate(script)
+	generated, err := script.Generate(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,15 +90,15 @@ func TestGenerateDefaultsGoVersionWhenOmitted(t *testing.T) {
 	source := []byte("//gorn:main\n" +
 		"println(\"hello\")\n")
 
-	script, err := parseSource("no-go-version.gorn", source)
+	file, err := parseSource("no-go-version.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if script.GoVersion != "" {
-		t.Fatalf("GoVersion = %q, want empty (test assumes //gorn:go is optional)", script.GoVersion)
+	if file.GoVersion != "" {
+		t.Fatalf("GoVersion = %q, want empty (test assumes //gorn:go is optional)", file.GoVersion)
 	}
 
-	generated, err := gornparser.Generate(script)
+	generated, err := script.Generate(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,18 +117,18 @@ func TestGenerateReturnsRawMainWhenFormattingFails(t *testing.T) {
 		"//gorn:main\n" +
 		"if {\n")
 
-	script, err := parseSource("bad-go.gorn", source)
+	file, err := parseSource("bad-go.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	generated, err := gornparser.Generate(script)
+	generated, err := script.Generate(file)
 	if generated != nil {
 		t.Fatalf("Generated = %+v, want nil on format failure", generated)
 	}
-	var genErr *gornparser.GenerateError
+	var genErr *script.GenerateError
 	if !errors.As(err, &genErr) {
-		t.Fatalf("error type = %T, want *gornparser.GenerateError", err)
+		t.Fatalf("error type = %T, want *script.GenerateError", err)
 	}
 	if len(genErr.Raw) == 0 {
 		t.Fatal("GenerateError.Raw is empty, want raw generated source")
@@ -173,17 +173,17 @@ func TestGenerateRejectsPreambleImportConflict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script, err := parseSource("conflict.gorn", []byte(tt.source))
+			file, err := parseSource("conflict.gorn", []byte(tt.source))
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = gornparser.Generate(script)
-			if !errors.Is(err, gornparser.ErrPreambleImportConflict) {
-				t.Fatalf("error = %v, want errors.Is(_, %v)", err, gornparser.ErrPreambleImportConflict)
+			_, err = script.Generate(file)
+			if !errors.Is(err, script.ErrPreambleImportConflict) {
+				t.Fatalf("error = %v, want errors.Is(_, %v)", err, script.ErrPreambleImportConflict)
 			}
-			var parseErr *gornparser.Error
+			var parseErr *script.LineError
 			if !errors.As(err, &parseErr) {
-				t.Fatalf("error type = %T, want *gornparser.Error", err)
+				t.Fatalf("error type = %T, want *script.LineError", err)
 			}
 			if parseErr.Line != tt.wantLine {
 				t.Fatalf("error line = %d, want %d", parseErr.Line, tt.wantLine)
@@ -199,11 +199,11 @@ func TestGenerateAllowsNonPreambleImportsWithPreamble(t *testing.T) {
 		"//gorn:main\n" +
 		"tool.Do()\n")
 
-	script, err := parseSource("ok.gorn", source)
+	file, err := parseSource("ok.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gornparser.Generate(script); err != nil {
+	if _, err := script.Generate(file); err != nil {
 		t.Fatalf("Generate = %v, want nil", err)
 	}
 }
@@ -215,11 +215,11 @@ func TestGenerateSkipsConflictCheckWithoutPreamble(t *testing.T) {
 		"//gorn:main\n" +
 		"fmt.Println()\n")
 
-	script, err := parseSource("no-preamble.gorn", source)
+	file, err := parseSource("no-preamble.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gornparser.Generate(script); err != nil {
+	if _, err := script.Generate(file); err != nil {
 		t.Fatalf("Generate = %v, want nil", err)
 	}
 }
@@ -239,11 +239,11 @@ func TestGeneratePreambleOutputCompiles(t *testing.T) {
 		"//gorn:main\n" +
 		"println(\"no preamble packages used directly\")\n")
 
-	script, err := parseSource("compile.gorn", source)
+	file, err := parseSource("compile.gorn", source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	generated, err := gornparser.Generate(script)
+	generated, err := script.Generate(file)
 	if err != nil {
 		t.Fatal(err)
 	}

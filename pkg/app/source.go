@@ -1,22 +1,22 @@
-package source
+package app
 
 import (
 	"path/filepath"
 	"strings"
 )
 
-// SourceError is a sentinel error type for invalid script sources.
-type SourceError string
+// Error is a sentinel error type for invalid script sources.
+type Error string
 
 const (
 	// ErrUnresolvedPath is returned when a Source is created with an empty path.
-	ErrUnresolvedPath SourceError = "unresolved path"
+	ErrUnresolvedPath Error = "unresolved path"
 	// ErrEmptyScript is returned when a Source is created with empty data.
-	ErrEmptyScript SourceError = "script is empty"
+	ErrEmptyScript Error = "script is empty"
 )
 
 // Error implements the error interface.
-func (e SourceError) Error() string { return string(e) }
+func (e Error) Error() string { return string(e) }
 
 // maxSlugLen bounds the cosmetic slug suffix on cache dir names. It's a
 // readability choice, kept well under the filesystem per-component limit
@@ -29,11 +29,11 @@ const maxSlugLen = 64
 type Source struct {
 	path   string
 	data   []byte
-	appKey AppKey
+	appKey Key
 	slug   string
 }
 
-// New validates path and data and returns a Source with its AppKey and Slug
+// New validates path and data and returns a Source with its Key and Slug
 // computed. It rejects an empty path (ErrUnresolvedPath) or empty data
 // (ErrEmptyScript), and maps the "-" stdin convention to /dev/stdin.
 func New(path string, data []byte) (*Source, error) {
@@ -50,7 +50,7 @@ func New(path string, data []byte) (*Source, error) {
 	return &Source{
 		path:   path,
 		data:   data,
-		appKey: GenerateAppKey(path, data),
+		appKey: NewKey(path, data),
 		slug:   makeSlug(path),
 	}, nil
 }
@@ -61,13 +61,13 @@ func (s *Source) Path() string { return s.path }
 // Data returns the raw script bytes.
 func (s *Source) Data() []byte { return s.data }
 
-// AppKey returns the content-derived cache key.
-func (s *Source) AppKey() AppKey { return s.appKey }
+// Key returns the content-derived cache key.
+func (s *Source) Key() Key { return s.appKey }
 
 // Slug returns a filesystem-safe, human-readable label derived from the script
 // name (its base without the .gorn extension), for use as a cosmetic suffix on
 // cache dir names. It is a pure function of the path, which is already part of
-// AppKey, so it never changes a cache lookup's outcome. Computed once in New;
+// Key, so it never changes a cache lookup's outcome. Computed once in New;
 // may be empty.
 func (s *Source) Slug() string { return s.slug }
 

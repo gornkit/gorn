@@ -14,7 +14,7 @@ Where this spec and [`docs/archive/GORN_DESIGN.md`](../archive/GORN_DESIGN.md) d
 
 Read this section first; it sets expectations for the rest of the document.
 
-- **Implemented and tested:** the `.gorn` source file format below (shebang, directives, the package/main split, every parse error), **code generation** — turning a parsed `Script` into a `go.mod` and a formatted `main.go` (both in `pkg/gornparser`) — and the **build/run pipeline**. `gorn run <script>` (and the `gorn <script>` shorthand) parses, generates, builds the module with the Go toolchain, caches the built binary keyed on a content hash, and executes it, forwarding script args. `--print-mod`/`--print-main` print the generated artifacts and exit without running; `--no-cache` builds fresh and bypasses the cache; `--verbose` adds stderr diagnostics (including a `cache: hit/miss/bypass` line).
+- **Implemented and tested:** the `.gorn` source file format below (shebang, directives, the package/main split, every parse error), **code generation** — turning a parsed `File` into a `go.mod` and a formatted `main.go` (both in `pkg/script`) — and the **build/run pipeline**. `gorn run <script>` (and the `gorn <script>` shorthand) parses, generates, builds the module with the Go toolchain, caches the built binary keyed on a content hash, and executes it, forwarding script args. `--print-mod`/`--print-main` print the generated artifacts and exit without running; `--no-cache` builds fresh and bypasses the cache; `--verbose` adds stderr diagnostics (including a `cache: hit/miss/bypass` line).
 - **Not yet implemented:** `gorn build`/`gorn cache` (stubs returning "not implemented"), `gorn eject`, fragments/includes (`.gfrag`) and their directives (`//gorn:fragment`, `//gorn:include`), and `//gorn:replace`.
 
 In short: Gorn parses, generates, builds, caches, and runs a `.gorn` file today; the subcommands and fragment/eject features above are still aspirational.
@@ -125,7 +125,7 @@ Rules and caveats:
 
 ## Errors
 
-Parsing (`ParseSource`/`ParseFile`) returns a `*gornparser.Error` wrapping one of the sentinels below, carrying the 1-based source line where the problem was detected. Generation (`Generate`) returns a `*gornparser.GenerateError`; for a preamble conflict it wraps a line-carrying `*Error`, and for a formatting failure it carries the raw unformatted output in `Raw`. `errors.Is` and `errors.As` work against all of these.
+Parsing (`Parse`) returns a `*script.LineError` wrapping one of the sentinels below, carrying the 1-based source line where the problem was detected. Generation (`Generate`) returns a `*script.GenerateError`; for a preamble conflict it wraps a line-carrying `*LineError`, and for a formatting failure it carries the raw unformatted output in `Raw`. `errors.Is` and `errors.As` work against all of these.
 
 | Error | Raised by | Meaning | Example |
 |---|---|---|---|
@@ -252,7 +252,7 @@ Fails with `ErrEmptyMain` at line 1 — there is nothing to run.
 
 `Script.PackageStart`/`Script.MainStart` record the 1-based source line of the first line in `Script.PackageContent`/`Script.MainContent`, respectively. Both are contiguous runs of the original source (no gaps from filtered-out directive or leading-blank lines), so a single `//line <path>:<N>` directive at `PackageStart`/`MainStart`, followed by emitting the corresponding content verbatim, maps generated-code compiler errors back to the original `.gorn` source — no per-line tracking needed. This is exactly what the generator's `main.gotmpl` template does.
 
-`MainStart` is a plain `int` and is always ≥ 1 on a successful parse (an empty main section is rejected with `ErrEmptyMain`). `PackageStart` is a `*int`, nil when the script has no non-blank package-section content. See the doc comments on `Script` in `pkg/gornparser/parser.go` for the exact guarantees.
+`MainStart` is a plain `int` and is always ≥ 1 on a successful parse (an empty main section is rejected with `ErrEmptyMain`). `PackageStart` is a `*int`, nil when the script has no non-blank package-section content. See the doc comments on `File` in `pkg/script/parser.go` for the exact guarantees.
 
 ## Not yet implemented
 

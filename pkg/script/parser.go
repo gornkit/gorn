@@ -1,4 +1,4 @@
-package gornparser
+package script
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	so "github.com/gornkit/gorn/pkg/source"
+	"github.com/gornkit/gorn/pkg/app"
 )
 
 type ParserError string
@@ -27,24 +27,24 @@ const (
 
 func (e ParserError) Error() string { return string(e) }
 
-type Error struct {
+type LineError struct {
 	Line int
 	Err  error
 }
 
-func (e *Error) Error() string {
+func (e *LineError) Error() string {
 	return e.Err.Error() + " at line " + strconv.Itoa(e.Line)
 }
 
-func (e *Error) Unwrap() error { return e.Err }
+func (e *LineError) Unwrap() error { return e.Err }
 
-func lineError(line int, err error) *Error {
-	return &Error{Line: line, Err: err}
+func lineError(line int, err error) *LineError {
+	return &LineError{Line: line, Err: err}
 }
 
-// Script is the parsed representation of a .gorn source file.
-type Script struct {
-	// SourcePath is the path passed to ParseFile/ParseSource ("-" for stdin).
+// File is the parsed representation of a .gorn source file.
+type File struct {
+	// SourcePath is the path passed to Parse.
 	SourcePath string
 
 	GoVersion   string
@@ -89,20 +89,20 @@ type Script struct {
 // Dump writes a developer-oriented summary of the parsed script, including
 // parser internals, to w on a best-effort basis. It backs `gorn run
 // --verbose` diagnostics.
-func (s *Script) Dump(w io.Writer) {
+func (f *File) Dump(w io.Writer) {
 	p := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format, args...) }
 	p("--- parsed script ---\n")
-	p("Path:         %s\n", s.SourcePath)
-	p("GoVersion:    %q\n", s.GoVersion)
-	p("Module:       %q\n", s.Module)
-	p("UsePreamble:  %t\n", s.UsePreamble)
-	p("Requires:     %+v\n", s.Requires)
-	p("PackageStart: %s\n", intPtrString(s.PackageStart))
-	p("MainStart:    %d\n", s.MainStart)
+	p("Path:         %s\n", f.SourcePath)
+	p("GoVersion:    %q\n", f.GoVersion)
+	p("Module:       %q\n", f.Module)
+	p("UsePreamble:  %t\n", f.UsePreamble)
+	p("Requires:     %+v\n", f.Requires)
+	p("PackageStart: %s\n", intPtrString(f.PackageStart))
+	p("MainStart:    %d\n", f.MainStart)
 	p("--- PackageContent ---\n")
-	p("%s", s.PackageContent)
+	p("%s", f.PackageContent)
 	p("--- MainContent ---\n")
-	p("%s", s.MainContent)
+	p("%s", f.MainContent)
 	p("--- end ---\n")
 }
 
@@ -124,14 +124,14 @@ type state struct {
 	currLine          int
 	mainBuilder       strings.Builder
 	packageBuilder    strings.Builder
-	script            *Script
+	script            *File
 }
 
-func ParseSource(s *so.Source) (*Script, error) {
+func Parse(s *app.Source) (*File, error) {
 	data := s.Data()
 
 	state := &state{
-		script: &Script{
+		script: &File{
 			SourcePath: s.Path(),
 		},
 	}

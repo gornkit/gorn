@@ -1,4 +1,4 @@
-package fs
+package cache
 
 import (
 	"encoding/json"
@@ -7,20 +7,20 @@ import (
 	"runtime"
 	"time"
 
-	so "github.com/gornkit/gorn/pkg/source"
+	"github.com/gornkit/gorn/pkg/app"
 )
 
 // manifestSchema versions the on-disk manifest. Bump it when the shape changes;
-// CachedBin treats a mismatched schema as a miss, so old entries rebuild.
+// Lookup treats a mismatched schema as a miss, so old entries rebuild.
 const manifestSchema = 1
 
 const manifestName = "manifest.json"
 
 // Manifest is written into each app dir. It is both the cache-validity gate
-// (AppKey + BinSHA256) and human-readable build metadata.
+// (Key + BinSHA256) and human-readable build metadata.
 type Manifest struct {
 	Schema    int    `json:"schema"`
-	AppKey    string `json:"app_key"`
+	Key       string `json:"key"`
 	BinSHA256 string `json:"bin_sha256"`
 	GoVersion string `json:"go_version"`
 	GOOS      string `json:"goos"`
@@ -29,10 +29,10 @@ type Manifest struct {
 	BuiltAt   string `json:"built_at"`
 }
 
-func newManifest(s *so.Source, binSHA256 string) Manifest {
+func newManifest(s *app.Source, binSHA256 string) Manifest {
 	return Manifest{
 		Schema:    manifestSchema,
-		AppKey:    string(s.AppKey()),
+		Key:       string(s.Key()),
 		BinSHA256: binSHA256,
 		GoVersion: runtime.Version(),
 		GOOS:      runtime.GOOS,

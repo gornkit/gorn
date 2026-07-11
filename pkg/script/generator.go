@@ -1,4 +1,4 @@
-package gornparser
+package script
 
 import (
 	"bytes"
@@ -83,9 +83,9 @@ func (e *GenerateError) Error() string { return e.Err.Error() }
 
 func (e *GenerateError) Unwrap() error { return e.Err }
 
-func Generate(s *Script) (*Generated, error) {
-	if s.UsePreamble {
-		if err := checkPreambleConflicts(s); err != nil {
+func Generate(f *File) (*Generated, error) {
+	if f.UsePreamble {
+		if err := checkPreambleConflicts(f); err != nil {
 			return nil, err
 		}
 	}
@@ -95,9 +95,9 @@ func Generate(s *Script) (*Generated, error) {
 		GoVersion string
 		Requires  []Require
 	}{
-		Module:    s.Module,
-		GoVersion: s.GoVersion,
-		Requires:  s.Requires,
+		Module:    f.Module,
+		GoVersion: f.GoVersion,
+		Requires:  f.Requires,
 	}
 
 	if modData.Module == "" {
@@ -121,14 +121,14 @@ func Generate(s *Script) (*Generated, error) {
 		PreambleImports string
 		PreambleVars    string
 	}{
-		SourcePath:     s.SourcePath,
-		PackageContent: s.PackageContent,
-		MainContent:    s.MainContent,
-		MainStart:      s.MainStart,
-		PackageStart:   s.PackageStart,
+		SourcePath:     f.SourcePath,
+		PackageContent: f.PackageContent,
+		MainContent:    f.MainContent,
+		MainStart:      f.MainStart,
+		PackageStart:   f.PackageStart,
 	}
 
-	if s.UsePreamble {
+	if f.UsePreamble {
 		var pkgsBuilder strings.Builder
 		var varsBuilder strings.Builder
 		for _, pair := range preamblePackages {
@@ -153,7 +153,7 @@ func Generate(s *Script) (*Generated, error) {
 
 	fset := token.NewFileSet()
 	// Parse the formatted main file to ensure it is valid Go code.
-	if _, err := parser.ParseFile(fset, s.SourcePath, formattedMain, parser.SkipObjectResolution); err != nil {
+	if _, err := parser.ParseFile(fset, f.SourcePath, formattedMain, parser.SkipObjectResolution); err != nil {
 		return nil, &GenerateError{Err: err, Raw: mainGenerated}
 	}
 
@@ -172,7 +172,7 @@ func Generate(s *Script) (*Generated, error) {
 // This only inspects imports (parser.ImportsOnly); it does not type-check.
 // If the package section does not parse, the error is left for the real build
 // to surface against //line-mapped output.
-func checkPreambleConflicts(s *Script) error {
+func checkPreambleConflicts(s *File) error {
 	if s.PackageStart == nil {
 		return nil
 	}

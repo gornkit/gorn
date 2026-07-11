@@ -1,4 +1,4 @@
-package app
+package cli
 
 import "errors"
 
@@ -6,6 +6,6 @@ type BuildOpts struct {
 	Verbose bool
 }
 
-func BuildCmd(o BuildOpts) error {
+func Build(o BuildOpts) error {
 	return errors.New("build command not implemented")
 }

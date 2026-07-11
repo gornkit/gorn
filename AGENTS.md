@@ -5,7 +5,7 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 ## Layout
 
 - Root `package main` → `go install github.com/gornkit/gorn` installs the CLI as `gorn`.
-- `pkg/` → the CLI's internal packages (not importable via the root): `gornparser` (parse `.gorn` + generate `go.mod`/`main.go`), `source` (validated script `Source`, content-hash cache key, dir slug), `fs` (build cache root, `Emit` build/publish, manifest), `app` (`RunCmd` orchestration; `build`/`cache` subcommand stubs).
+- `pkg/` → the CLI's internal packages (not importable via the root): `script` (parse `.gorn` + generate `go.mod`/`main.go`), `app` (validated script `Source`, content-hash cache `Key`, dir slug), `cache` (build cache `Root`, `Root.Build` build/publish, manifest), `cli` (`Run`/`Build`/`Cache` orchestration; `build`/`cache` subcommand stubs).
 - `sh/` → library package, imported as `github.com/gornkit/gorn/sh`. Current v0 is shell-exec only: `Host()/Bash()/Zsh()/Sh()/CmdExe()/Pwsh()`, `Setup()/Strict()/Shell()/Exec()`, command IO/env/dir, process `Wait()/Kill()`, and status-only `Result`.
 - The root is not importable as a library; consumers import subpackages.
 - `docs/archive/` holds historical/reference design docs. They are useful context, but the implementation and root docs are authoritative when they diverge.

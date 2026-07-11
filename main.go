@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	arg "github.com/alexflint/go-arg"
-	"github.com/gornkit/gorn/pkg/app"
+	"github.com/gornkit/gorn/pkg/cli"
 )
 
 var Version = "dev"
@@ -20,7 +20,7 @@ type Common struct {
 	Verbose bool `arg:"-v,--verbose" help:"Enable verbose diagnostics on stderr"`
 }
 
-type RunCmd struct {
+type runArgs struct {
 	PrintMod  bool     `arg:"--print-mod" help:"Print the generated go.mod, then exit (does not run)"`
 	PrintMain bool     `arg:"--print-main" help:"Print the generated main.go, then exit (does not run)"`
 	NoCache   bool     `arg:"--no-cache" help:"Bypass any cached app output"`
@@ -28,18 +28,18 @@ type RunCmd struct {
 	Args      []string `arg:"positional" placeholder:"args" help:"Arguments to pass to the script"`
 }
 
-type BuildCmd struct {
+type buildArgs struct {
 	// TODO
 }
 
-type CacheCmd struct {
+type cacheArgs struct {
 	// TODO
 }
 
 type CLI struct {
-	Run   *RunCmd   `arg:"subcommand:run" help:"Run a script. Default if no command specified"`
-	Build *BuildCmd `arg:"subcommand:build" help:"Build a script"`
-	Cache *CacheCmd `arg:"subcommand:cache" help:"Manage cache"`
+	Run   *runArgs   `arg:"subcommand:run" help:"Run a script. Default if no command specified"`
+	Build *buildArgs `arg:"subcommand:build" help:"Build a script"`
+	Cache *cacheArgs `arg:"subcommand:cache" help:"Manage cache"`
 }
 
 func (CLI) Description() string {
@@ -79,7 +79,7 @@ func RunCLI(args []string, stdout, stderr io.Writer, exit func(int)) error {
 			// RELEASE user facing error message
 			return fmt.Errorf("failed to parse subcommand: %w", err)
 		}
-		runCmd := RunCmd{}
+		runCmd := runArgs{}
 		runParser, err := newParser(stdout, exit, &runCmd, &cmn)
 		if err != nil {
 			// RELEASE user facing error message
@@ -120,11 +120,11 @@ func newParser(out io.Writer, exit func(int), dest ...any) (*arg.Parser, error) 
 
 func runSelected(parser *arg.Parser, common *Common, stdout, stderr io.Writer) error {
 	switch cmd := parser.Subcommand().(type) {
-	case *RunCmd:
+	case *runArgs:
 		return cmd.Run(common, stdout, stderr)
-	case *BuildCmd:
+	case *buildArgs:
 		return cmd.Run(common, stdout, stderr)
-	case *CacheCmd:
+	case *cacheArgs:
 		return cmd.Run(common, stdout, stderr)
 	default:
 		parser.WriteHelp(stdout)
@@ -132,12 +132,12 @@ func runSelected(parser *arg.Parser, common *Common, stdout, stderr io.Writer) e
 	}
 }
 
-func (r *RunCmd) Run(common *Common, stdout, stderr io.Writer) error {
+func (r *runArgs) Run(common *Common, stdout, stderr io.Writer) error {
 	script, err := scriptPath(r.Script)
 	if err != nil {
 		return err
 	}
-	return app.RunCmd(app.RunOpts{
+	return cli.Run(cli.RunOpts{
 		Stdout:     stdout,
 		Stderr:     stderr,
 		Verbose:    common.Verbose,
@@ -163,14 +163,14 @@ func scriptPath(script string) (string, error) {
 	return script, nil
 }
 
-func (b *BuildCmd) Run(common *Common, stdout, stderr io.Writer) error {
-	return app.BuildCmd(app.BuildOpts{
+func (b *buildArgs) Run(common *Common, stdout, stderr io.Writer) error {
+	return cli.Build(cli.BuildOpts{
 		Verbose: common.Verbose,
 	})
 }
 
-func (c *CacheCmd) Run(common *Common, stdout, stderr io.Writer) error {
-	return app.CacheCmd(app.CacheOpts{
+func (c *cacheArgs) Run(common *Common, stdout, stderr io.Writer) error {
+	return cli.Cache(cli.CacheOpts{
 		Verbose: common.Verbose,
 	})
 }
