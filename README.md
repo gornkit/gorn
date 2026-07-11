@@ -1,5 +1,7 @@
 # gorn
 
+[![CI](https://github.com/gornkit/gorn/actions/workflows/ci.yml/badge.svg)](https://github.com/gornkit/gorn/actions/workflows/ci.yml)
+
 **Go Right Now** — a runner for single-file Go automation scripts.
 
 > Gorn lets you write single-file Go scripts with a small directive layer,

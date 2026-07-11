@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs the mise-pinned toolchain (go, golangci-lint) from
+      # .config/mise.lock and puts it on PATH for later steps.
+      - uses: jdx/mise-action@v2
+
+      - name: Resolve Go cache paths
+        id: gocache
+        shell: bash
+        run: |
+          echo "mod=$(go env GOMODCACHE)" >>"$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >>"$GITHUB_OUTPUT"
+
+      - name: Cache Go modules and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.gocache.outputs.mod }}
+            ${{ steps.gocache.outputs.build }}
+          key: go-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-
+
+      - name: Lint
+        run: golangci-lint run --config .config/golangci.yaml ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -covermode=atomic -coverprofile=coverage.out -count=1 ./...
+
+      - name: Coverage summary
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          {
+            echo '### Coverage'
+            echo '```'
+            go tool cover -func=coverage.out | tail -1
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
