@@ -521,6 +521,78 @@ noninteractive automation without a blocking confirmation prompt. Refusing
 overwrite by default protects existing output; `--force` provides a deliberate
 regular-file replacement policy.
 
+## Standalone binary export
+
+**Implemented (12):** `gorn build <script> -o <path>` uses the same source parser,
+generator, frozen build profile, dependency resolver, ownership checks and leased
+cache entry as run. It never starts the script: neither `init` nor `main` runs.
+The core path is shared in [preparation](../../pkg/cli/prepare.go), with inspection
+still returning before any toolchain/cache work. `--no-cache` builds and removes a
+private leased stage; ordinary cold/warm exports share the same cache as run.
+
+Export targets the invocation host with the existing pure-Go/CGO-disabled profile.
+No new cross-compilation flag or dependency policy is introduced. The copied
+binary is standalone: neither Gorn nor Go is needed at runtime, including for a
+bundled `sh` import. Runtime programs may still need their own external commands
+or data. Source `-` uses the same cancellable source-stdin contract as run.
+
+Require `-o`/`--output`; its parent directory must already exist. Resolve relative
+paths from the invocation directory. Refuse requested directories and symlinks
+before platform naming, including dangling symlinks. On Windows, append `.exe`
+only if no extension was supplied; preserve explicit extensions on every host.
+Refuse source replacement through lexical identity, case-equivalent Windows
+paths, or existing file identity, including hard-link and symlink-source aliases.
+An existing regular output requires `--force`; force also permits an absent output.
+
+Copy the validated leased binary into a private same-directory temporary file.
+Check cancellation while copying and before publication; set executable mode
+0755 (Windows uses inherited directory ACLs), sync/close the completed file, and
+revalidate destination/source guards. Keep the entry lease through copy and
+publication. Stdout stays empty; progress, verbose cache/output information and
+errors use stderr, with the existing quiet and redaction policies.
+
+Publication uses the standard library's directory-handle operations:
+
+- Default: `os.Root.Link` atomically creates a new destination name without
+  replacing an incumbent, including one created by a racing export. It requires
+  filesystem hard-link support. Unsupported filesystems report an error; there
+  is no racy rename or partially visible copy fallback. An operator can choose
+  `--force` to request native rename/replacement semantics instead.
+- Force: `os.Root.Rename` performs a single same-directory namespace operation.
+  The pinned Go runtime uses Unix `renameat` and Windows native
+  `NtSetInformationFile` rename, including its single-operation legacy fallback.
+  It does not copy/delete an incumbent or use the multi-step ReplaceFile API.
+  Recheck this implementation boundary when upgrading the pinned toolchain.
+
+The successful link/rename is the publication commit point. Pre-publication
+build, copy, validation, cancellation, permission or sharing failures preserve an
+existing destination. Cancellation racing after commit may leave a valid output;
+post-commit handle/staging cleanup failures are reported and do not roll it back.
+A completed staged file is synced, but parent-directory fsync and power-loss
+transactional durability are outside the atomic-visibility contract. Filesystem
+semantics still apply; automatic destructive fallback is excluded.
+
+Alternatives: writing directly to output exposes partial binaries and truncates
+existing files on failure. Checking absence followed by ordinary rename loses an
+output race. Universal no-replace rename lacks a portable standard-library API;
+atomic hard-link creation provides that policy without another dependency.
+A handcrafted Windows FFI rename would duplicate the pinned runtime's tested
+ABI/path handling. Windows ReplaceFile has documented multi-step failure states
+that can move/remove the incumbent, so the selected native rename operation is
+preferable. Explicit output naming and overwrite intent make shell automation
+predictable; automatically creating parent trees would hide path mistakes.
+
+Evidence: [export policy/concurrency tests](../../pkg/cli/export_test.go) and
+[installed build tests](../../build_integration_test.go) cover cold/warm/bypass,
+stdin, compiler and overwrite failures, source aliases, native naming/modes,
+concurrent no-replace publication, cancellation, no execution at build time, and
+stdlib/bundled-helper binaries running from another directory with an empty PATH.
+The full inspection/execution suite also verifies the shared preparation path.
+
+Native references: [Go os.Root](https://pkg.go.dev/os#Root),
+[Windows FileRenameInformation](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fsa/87f86c9b-6c2a-4803-84b7-131a74a434fa),
+[ReplaceFile failure states](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew).
+
 ## Progress and verification
 
 GORN-V1-11 implements immediate preparation phases and a two-second stderr

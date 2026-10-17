@@ -10,8 +10,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/gornkit/gorn/pkg/buildprofile"
-	"github.com/gornkit/gorn/pkg/cache"
 	"github.com/gornkit/gorn/pkg/process"
 	"github.com/gornkit/gorn/pkg/progress"
 	"github.com/gornkit/gorn/pkg/script"
@@ -112,33 +110,8 @@ func RunContext(ctx context.Context, o RunOpts) (resultErr error) {
 		// remains to race script output or write from a background tty group.
 		return execCmd(ctx, runtimeOpts, bin)
 	}
-	source, err := readSource(sourceContext, o.ScriptPath, o.Input)
+	source, gen, err := generateScript(ctx, sourceContext, o)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", o.ScriptPath, err)
-	}
-
-	file, err := script.Parse(source)
-	if err != nil {
-		return fmt.Errorf("parse %s: %w", o.ScriptPath, err)
-	}
-
-	if o.Verbose {
-		_, _ = o.Stderr.Write([]byte(o.invocation()))
-	}
-
-	// Generation is the validation step: always generate so an invalid script
-	// (e.g. a preamble import conflict) is surfaced, even for a plain run.
-	gen, err := script.Generate(file)
-	if err != nil {
-		// Internal generation failures carry the generated file for debugging.
-		var genErr *script.GenerateError
-		if o.Verbose && errors.As(err, &genErr) && genErr.Raw != nil {
-			_, _ = fmt.Fprintln(o.Stderr, "--- invalid generated main.go ---")
-			_, _ = fmt.Fprint(o.Stderr, string(genErr.Raw))
-		}
-		return fmt.Errorf("generate: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
 		return err
 	}
 
@@ -147,55 +120,11 @@ func RunContext(ctx context.Context, o RunOpts) (resultErr error) {
 		return printArtifacts(o, gen)
 	}
 
-	var bundle *script.HelperBundle
-	helperDigest := ""
-	if gen.BundleHelper {
-		bundle, err = script.LoadHelper(o.HelperSources)
-		if err != nil {
-			return err
-		}
-		helperDigest = bundle.Digest()
-	}
-	if len(gen.EmbedLines) > 0 {
-		return fmt.Errorf("%s: source //go:embed is unsupported in a single-file app at line %d", gen.SourcePath, gen.EmbedLines[0])
-	}
-	for _, imp := range gen.Imports {
-		if imp.Path == "C" {
-			return fmt.Errorf("%s: import C is unsupported by the pure-Go build profile at line %d", gen.SourcePath, imp.Line)
-		}
-	}
-	profile, err := buildprofile.DiscoverContext(ctx, gen.GoVersion, helperDigest)
-	if err != nil {
-		return fmt.Errorf("build profile: %w", err)
-	}
-	source = source.WithBuildIdentity(profile.Identity())
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := progress.Phase(ctx, "checking build cache"); err != nil {
-		return err
-	}
-
-	cacheRoot, err := cache.Open()
+	entry, err := compileScript(ctx, o, source, gen)
 	if err != nil {
 		return err
 	}
-
-	entry, err := cacheRoot.BuildContext(ctx, source, gen, o.NoCache, bundle, profile)
-	if err != nil {
-		return fmt.Errorf("emit: %w", err)
-	}
-	defer func() {
-		if err := entry.Close(); err != nil {
-			cleanupErr := fmt.Errorf("close cache entry: %w", err)
-			if resultErr == nil {
-				resultErr = cleanupErr
-			} else {
-				// Keep an ordinary child's status while making cleanup failure visible.
-				_, _ = fmt.Fprintln(runtimeOpts.Stderr, cleanupErr)
-			}
-		}
-	}()
+	defer closeEntry(entry, runtimeOpts.Stderr, &resultErr)
 
 	if o.Verbose {
 		switch {
