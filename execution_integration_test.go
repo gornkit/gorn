@@ -91,15 +91,30 @@ func main(){code,_:=strconv.Atoi(os.Args[1]);fmt.Print("out");fmt.Fprint(os.Stde
 	argsScript := writeScript(t, dir, "args 世界.gorn", `package main
 import("fmt";"io";"os")
 func main(){cwd,_:=os.Getwd();data,_:=io.ReadAll(os.Stdin);fmt.Printf("%q\n%s\n%s",os.Args[1:],cwd,data)}`)
-	wantCwd, err := filepath.EvalSymlinks(dir)
+	wantDir, err := os.Stat(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, prefix := range [][]string{{"run"}, {}} {
-		got := invokeCLI(t, bin, dir, "runtime input", append(append([]string(nil), prefix...), argsScript, "--", "--flag", "two words", "", "--", "-v")...)
-		want := "[\"--flag\" \"two words\" \"\" \"--\" \"-v\"]\n" + wantCwd + "\nruntime input"
-		if got.code != 0 || got.stdout != want || got.stderr != "" {
-			t.Fatalf("arguments prefix=%v: %+v, want %q", prefix, got, want)
+	cwds := []string{dir}
+	alias := filepath.Join(t.TempDir(), "cwd-alias")
+	if err := os.Symlink(dir, alias); err == nil {
+		cwds = append(cwds, alias)
+	} else {
+		t.Logf("cwd symlink unavailable: %v", err)
+	}
+	for _, cwd := range cwds {
+		for _, prefix := range [][]string{{"run"}, {}} {
+			got := invokeCLI(t, bin, cwd, "runtime input", append(append([]string(nil), prefix...), argsScript, "--", "--flag", "two words", "", "--", "-v")...)
+			parts := strings.SplitN(got.stdout, "\n", 3)
+			if got.code != 0 || got.stderr != "" || len(parts) != 3 || parts[0] != "[\"--flag\" \"two words\" \"\" \"--\" \"-v\"]" || parts[2] != "runtime input" {
+				t.Fatalf("arguments prefix=%v cwd=%s: %+v", prefix, cwd, got)
+			}
+			// cwd spelling may be logical, canonical, or Windows short-name form.
+			// Directory identity proves that the runner preserved invocation cwd.
+			actualDir, err := os.Stat(parts[1])
+			if err != nil || !os.SameFile(wantDir, actualDir) {
+				t.Fatalf("runtime cwd=%q differs from invocation directory: %v", parts[1], err)
+			}
 		}
 	}
 	for _, args := range [][]string{{"run"}, {"-v", "run"}, {"--verbose", "run"}, {"-v=false", "run"}, {"run", "--unknown"}, {"--unknown"}} {
