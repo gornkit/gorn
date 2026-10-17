@@ -2,210 +2,169 @@
 
 [![CI](https://github.com/gornkit/gorn/actions/workflows/ci.yml/badge.svg)](https://github.com/gornkit/gorn/actions/workflows/ci.yml)
 
-**Go Right Now** — a runner for single-file Go automation scripts.
+**Go file apps you can run right now.** Write one Go main file, run it with
+arguments and normal IO, then rerun its cached executable or export a binary.
 
-> Gorn lets you write single-file Go scripts with a small directive layer,
-> generated modules, cached builds, and a portable `sh` helper package.
+Gorn is preparing for v1. The current development build supports `run`, `build`
+and explicit cache management. Scripts use `package main` and `func main()`;
+`.gorn` remains the filename convention.
 
-## Status
+## Install
 
-Pre-alpha, but the runner works end to end: `gorn run <script>` (or the
-`gorn <script>` shorthand) parses the script, generates a module, builds it
-with the Go toolchain, caches the binary keyed on a content hash, and runs it,
-forwarding args. The `sh` package has a usable shell-exec v0. `gorn build` exports standalone binaries, and `gorn cache` inspects and manages
-owned build data.
-
-## `sh` package
-
-`github.com/gornkit/gorn/sh` runs shell snippets with normal Go IO and
-status-only results:
-
-```go
-sh.Host().Exec("go test ./...").OrExit()
-
-sh.Bash().
-	Strict().
-	Shell("go test ./...").
-	Env("CI", "1").
-	Exec().
-	OrExit()
-```
-
-Use `sh.Cmd(name, args...)` for exact executable arguments and `.Shell(script)`
-when shell syntax is needed. Globbing and file helpers remain outside v1. See the
-[helper contract](docs/specs/gorn-sh.md) for supported shells, startup, strictness,
-setup ordering, IO and process results.
-
-## Design
-
-- [`docs/specs/gorn-sh.md`](docs/specs/gorn-sh.md) — exact arguments and supported shell behavior.
-- [`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) — the `.gorn` script format, as currently implemented (authoritative).
-- [`docs/planning/v1-backlog.md`](docs/planning/v1-backlog.md) — current-state assessment and proposed v1 backlog (draft).
-- [`docs/archive/GORN_DESIGN.md`](docs/archive/GORN_DESIGN.md) — overall design and non-goals (historical/reference).
-- [`docs/archive/sh-package-design-v0.md`](docs/archive/sh-package-design-v0.md) — the `sh` helper package (historical/reference).
-- [`docs/archive/IMPLEMENTATION_PLAN.md`](docs/archive/IMPLEMENTATION_PLAN.md) — build order (historical/reference).
-
-## Development
-
-Dev environment is pinned with [mise](https://mise.jdx.dev/):
+Install Go **1.26.4 or newer**, with `go` on PATH, then install the development
+build:
 
 ```sh
-mise trust && mise install
-```
-
-See [`AGENTS.md`](./AGENTS.md) for build/lint/test commands and conventions.
-
-Current CLI:
-
-```sh
-gorn <script.gorn> [-- args...]        # shorthand for run
-gorn run [flags] <script.gorn> [-- args...]
-gorn build app.gorn -o ./app            # compile a standalone host executable
-gorn build app.gorn -o ./app --force    # replace an existing regular output
-gorn cache path                        # selected cache root, without creating it
-gorn cache list --json                 # inventory and recorded build provenance
-gorn cache clean <key-prefix> --dry-run # preview one unambiguous entry
-gorn cache clean --all --yes           # skip active data; preserve unknown data
-gorn cache prune --max-age 168h --max-bytes 100000000 --yes
+go install github.com/gornkit/gorn@main
 gorn --version
-
-# run flags:
-#   --print-mod     print the generated go.mod, then exit (does not run)
-#   --print-main    print the generated main.go, then exit (does not run)
-#   --no-cache      build fresh and bypass the cache
-#   -q, --quiet     suppress gorn phase/heartbeat progress
-#   -v, --verbose   diagnostics on stderr
 ```
 
-Inspection parses and generates source without running the script, accessing the
-build cache, or invoking Go. Output-write failures are reported as errors.
+Put Go's binary directory on PATH: `go env GOBIN` if set, otherwise the `bin`
+directory under `go env GOPATH`. These Go commands work in Unix shells and
+PowerShell. `@main` follows development and can change; an approved versioned
+release will provide a fixed install target. Source installs can currently report
+`gorn dev`. Downloading Go modules normally needs network access on first install.
 
-Gorn announces preparation phases immediately and reports pending work every two
-seconds on stderr. `--quiet` suppresses those messages, preserving Go diagnostics
-and script stderr. Explicit `--verbose` diagnostics remain available with quiet.
-Progress stops before the script takes control of its original terminal streams;
-the script owns its own runtime activity. Artifact/script stdout remains pipeable.
+The runner needs installed Go on every run, including warm hits, to validate its
+build profile. An exported executable needs neither Go nor Gorn, but still needs
+any commands/data its script uses. Builds target the current host with cgo
+disabled. Scripts execute with your permissions.
 
-Use `--` before script arguments that look like gorn flags. Child exit codes and
-stdout/stderr are preserved; usage errors go to stderr with status 2. Scripts run
-from the invocation directory. Source supplied through `-` consumes stdin before
-the program starts. Relative `GORN_CACHE` paths resolve from the invocation
-directory; an unusable explicit cache path reports an error.
+## Your first script
 
-Ctrl-C and termination cancel source collection and Go work. Foreground scripts
-receive terminal signals and may handle or ignore them; root cancellation or
-an observed interrupt exit triggers invocation cleanup.
-On Linux/macOS, Gorn cleans its process group with TERM and bounded KILL escalation
-and preserves foreground terminal input/Ctrl-C. Full suspend/resume job control
-and deliberately escaped groups are outside v1. Windows tree termination is best
-effort, using native taskkill and direct-process fallback. The
-[lifecycle contract](docs/specs/gorn-build-runtime.md#cancellation-and-process-ownership)
-documents IO ownership, timing, supported architectures, and platform limits.
-
-`sh.Cmd(name, args...)` runs exact arguments without shell interpretation.
-`sh.Bash().Shell(script)` retains shell syntax. Both support immutable
-`.Dir`, `.Env`, `.Stdin`, `.Stdout`, `.Stderr`, and `.Context(ctx)` configuration.
-Shells use non-login automation defaults; `NewShell` can opt into profiles.
-`Strict` follows shell-specific rules, including PowerShell native-command limits.
-Start returns a process with repeatable/concurrent Wait and idempotent Kill;
-cancellation errors support `errors.Is` with context cancellation/deadline errors.
-
-The build cache uses `$GORN_CACHE`, otherwise the OS user cache directory,
-otherwise a temp directory if the OS cannot determine a user cache directory.
-Creation or permission errors fail explicitly. Builds use full identity keys and OS-backed leases. Invalid
-owned entries rebuild automatically; unrecognized data is preserved and reported.
-Concurrent cold invocations share one build, and active executables remain leased
-through use. `--no-cache` builds privately and cleans up afterward. Older cache
-layouts are left untouched. See the [cache contract](docs/specs/gorn-build-runtime.md#cache-publication-repair-and-management)
-for ownership, quarantine, cancellation and filesystem boundaries.
-
-Cache commands need no Go installation. `path`, `list` and `--dry-run` write no
-cache files. `list --json` reports schema-1 identity, source, build time, recorded
-profile, validity and separate byte totals for entries, stages, quarantine and
-unmanaged data. `clean --all` also collects abandoned owned stages/quarantine.
-Prune uses build age, then oldest-first logical entry bytes; active objects are
-skipped. `--max-bytes 0` requests an empty managed-entry cache. Incomplete byte
-counts or an unmet budget return status 1 with the observed report. Preview is a
-selection estimate and does not reserve activity. Mutation requires `--yes`;
-`--json` keeps reports on stdout and diagnostics on stderr.
-
-`gorn build` compiles without executing the script, reusing a valid cache entry
-or building privately with `--no-cache`. The exported executable runs without Go
-or Gorn installed. Specify `-o`; its parent must exist. Existing files require
-`--force`; source files, directories, and symlinks are refused. Windows adds
-`.exe` when no extension is supplied; explicit extensions are preserved. Output
-publication is atomic, with filesystem hard-link support required for the default
-no-overwrite policy. See the [export contract](docs/specs/gorn-build-runtime.md#standalone-binary-export)
-for naming, permissions, native publication, and failure behavior.
-
-## Writing scripts
-
-Scripts declare `package main` and an explicit `func main()`. Helpers can appear
-before or after main. Ordinary Go imports and declarations work as usual:
+Save this as `hello.gorn` ([maintained example](examples/hello.gorn)):
 
 ```go
-//gorn:go 1.26
 package main
 
-import "fmt"
+import (
+    "fmt"
+    "os"
+)
 
 func main() {
-	greet("gorn")
-}
-
-func greet(name string) {
-	fmt.Println("hello,", name)
+    name := "world"
+    if len(os.Args) > 1 {
+        name = os.Args[1]
+    }
+    fmt.Println("hello,", name)
 }
 ```
 
-An optional first-line shebang (`#!/usr/bin/env gorn`) is supported. Gorn
-preserves your Go source formatting and literal values while generating the
-module and any preamble additions. There is no `//gorn:main` divider.
+```sh
+gorn run hello.gorn -- Ada
+gorn hello.gorn -- Ada
+gorn build hello.gorn -o ./hello
+```
 
-When a script needs real I/O or common helpers, `//gorn:preamble` makes a
-small, fixed set of packages ambient — `fmt`, `os`, `path/filepath`,
-`strconv`, `strings`, `time`, and gorn's own `sh` — so you can use them
-without writing the imports:
+Both runs print `hello, Ada`. The second can use the cached build. Run `./hello`
+on Unix or `.\hello.exe` in PowerShell. Windows adds `.exe` to an extensionless
+output name; explicit extensions stay as written. The output parent must exist;
+replace an existing regular file with `--force`.
+
+On Unix, optionally add `#!/usr/bin/env gorn` as the first line, run
+`chmod +x hello.gorn`, then `./hello.gorn Ada`. Windows uses explicit
+`gorn run .\hello.gorn -- Ada`; a shebang is not a Windows executable association.
+Go tooling may need an editor language association for `.gorn`.
+
+## Run, inspect and manage builds
+
+```sh
+gorn run hello.gorn -- --script-flag "two words"
+gorn run --no-cache hello.gorn
+gorn run --print-main hello.gorn
+gorn run --print-mod hello.gorn
+gorn cache path
+gorn cache list --json
+gorn cache clean <key-prefix> --dry-run
+gorn cache clean <key-prefix> --yes
+gorn cache prune --max-age 168h --max-bytes 100000000 --yes
+gorn --help
+gorn cache --help
+```
+
+Use `--` before script arguments that resemble Gorn flags. Runtime cwd stays the
+invocation directory, and stdin/stdout/stderr are inherited. Source `-` consumes
+stdin before the script starts. Child exit codes are preserved; usage errors
+return 2 and source/build/start errors return 1.
+
+Inspection preserves source text and never invokes Go, opens the build cache or
+executes the script. Cache inspection also needs no Go. Mutation requires
+`--yes`; preview writes no cache files and does not reserve activity. Cleanup
+skips active work and preserves unknown data. Prune uses build age and logical
+entry bytes; incomplete counts or unmet byte budgets return status 1. Go's module
+and build caches are separate and untouched. `GORN_CACHE` selects another root.
+
+Gorn reports phases and two-second heartbeats on stderr during preparation.
+`--quiet` suppresses activity; diagnostics and script stderr remain visible.
+`--verbose` adds diagnostics. Progress stops when the script starts so its normal
+terminal IO stays in control. See the [workflow guide](docs/specs/gorn-workflows.md)
+for offline behavior, dependencies, cancellation and troubleshooting.
+
+## Optional helpers and dependencies
+
+[The helper example](examples/helper.gorn) opts into a small fixed preamble:
 
 ```go
 //gorn:preamble
 package main
 
 func main() {
-	fmt.Println("real output, on stdout")
+    sh.Cmd("go", "version").Exec().OrExit()
 }
 ```
 
-Note: `print`/`println` are Go debug builtins — they write to **stderr** and
-their format isn't guaranteed. Use `fmt.Println` (with an explicit import or the preamble) for output
-a human or pipeline will read. See
-[`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) for the
-full format, the preamble package list, and its rules.
+The CLI bundles `github.com/gornkit/gorn/sh`, so helper source needs no separate
+module download. `sh.Cmd` passes executable arguments literally; `.Shell(script)`
+uses a chosen shell's syntax. Shells use non-login automation defaults.
+[The helper contract](docs/specs/gorn-sh.md) covers supported shells, setup,
+Strict, environment/IO, Wait/Kill and status-only results.
 
-For third-party imports, declare a concrete module minimum with
-`//gorn:require <module-path> <version>`. Gorn resolves only the declared graph;
-it never discovers an undeclared latest dependency. Direct imports need their
-own covering declaration even when another dependency brings the module in.
+For third-party packages, declare a concrete module minimum before `package`,
+then use normal Go imports:
 
-The preamble and explicit `sh` imports use production helper source bundled with
-the CLI, so stdlib/helper scripts build offline. To select a published helper,
-declare `//gorn:require github.com/gornkit/gorn <concrete-version>`. Mixing a
-transitive parent module with the bundled helper is rejected with that remedy.
-Builds retain the effective module, checksums, and selected graph in the cache.
-Other offline cold builds require populated Go caches; warm Gorn hits avoid
-downloads. Dependencies requiring a higher Go minimum need an explicit
-`//gorn:go` update.
+```go
+//gorn:require github.com/alexflint/go-arg v1.6.1
+package main
 
-Before cache lookup, Gorn identifies installed Go and freezes a host-only pure-Go
-profile. GOFLAGS supports tags, trimpath, and linker `-s`, `-w`, and
-`-X importpath.name=value`. Other flags, cgo/custom compilers, experiments, FIPS,
-and source embed/local compilation inputs are rejected. Identity includes the
-selected compiler, CLI generation, helper bytes, and supported settings; provenance
-hashes private linker/resolver values. Warm runs still require installed Go for
-profile discovery. Scripts keep ordinary runtime environment and arguments. See
-the [build/runtime contract](docs/specs/gorn-build-runtime.md) for syntax,
-alternatives, and limits.
+import (
+    "fmt"
+    "github.com/alexflint/go-arg"
+)
 
-## License
+func main() {
+    var opts struct { Name string `arg:"positional,required"` }
+    arg.MustParse(&opts)
+    fmt.Println("hello,", opts.Name)
+}
+```
+
+Save it as `greet.gorn` and run `gorn greet.gorn -- Ada`. Gorn resolves the
+declared graph using Go MVS and checksums. It never selects undeclared latest
+dependencies. Direct imports need covering declarations even when transitively
+available. Warm hits download no dependencies; cold dependency builds need network
+or populated Go caches. Stdlib and bundled-helper source build offline when Go is
+installed. To select a published helper, pin the parent module explicitly as
+[documented in the format](docs/specs/gorn-script-format.md#dependencies).
+
+## Contracts and development
+
+- [Script format](docs/specs/gorn-script-format.md): metadata, preamble, preserved source and diagnostics.
+- [Build/runtime contract](docs/specs/gorn-build-runtime.md): toolchain/profile inputs, dependencies, process ownership, cache and export.
+- [Workflow guide](docs/specs/gorn-workflows.md): install, run, build, cache and troubleshooting.
+- [Helper contract](docs/specs/gorn-sh.md): exact arguments and named shells.
+- [v1 roadmap](docs/planning/v1-backlog.md): delivered scope and release gates.
+
+Contributors need Git and [mise](https://mise.jdx.dev/):
+
+```sh
+mise trust && mise install
+mise run test
+```
+
+The mise lock pins Go, gopls and lint. `mise run test` runs lint, stamped build and
+uncached tests. See [AGENTS.md](AGENTS.md) for repository conventions. Archived
+designs remain historical; authoritative specs and implementation describe the
+current product.
 
 [Apache 2.0](LICENSE).
