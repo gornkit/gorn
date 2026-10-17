@@ -261,12 +261,19 @@ func TestOrdinaryBackgroundAndPipeBound(t *testing.T) {
 	if time.Since(started) > 2*time.Second {
 		t.Fatal("inherited pipe was not bounded")
 	}
-	before, _ := os.ReadFile(heartbeat)
-	time.Sleep(80 * time.Millisecond)
-	after, _ := os.ReadFile(heartbeat)
-	if string(before) == string(after) {
-		t.Fatal("ordinary exit killed background child")
+	before := awaitFile(t, heartbeat)
+	// A live child may be descheduled under CI load, and WriteFile has a brief
+	// truncation window. Observe fresh nonempty progress instead of assuming
+	// an 80ms scheduling interval; this does not relax the pipe bound above.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		after, err := os.ReadFile(heartbeat)
+		if err == nil && len(after) > 0 && string(before) != string(after) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
+	t.Fatal("ordinary background child made no progress after parent exit")
 }
 
 func TestConventionalInterruptionStatusCleansGroup(t *testing.T) {
