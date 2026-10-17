@@ -7,11 +7,14 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"go/version"
 	"io"
 	"strconv"
 	"strings"
 
 	"github.com/gornkit/gorn/pkg/app"
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 )
 
 type ParserError string
@@ -23,6 +26,9 @@ const (
 	ErrInvalidMain            ParserError = "main must have a body and no parameters, results, or type parameters"
 	ErrDirectiveAfterPackage  ParserError = "gorn directive after package clause"
 	ErrInvalidDirective       ParserError = "invalid gorn directive"
+	ErrInvalidGoVersion       ParserError = "invalid //gorn:go version"
+	ErrInvalidModule          ParserError = "invalid //gorn:module path"
+	ErrDuplicateRequire       ParserError = "duplicate //gorn:require module"
 	ErrInvalidRequire         ParserError = "invalid //gorn:require directive"
 	ErrDuplicateGo            ParserError = "duplicate //gorn:go directive"
 	ErrDuplicateModule        ParserError = "duplicate //gorn:module directive"
@@ -52,18 +58,22 @@ type File struct {
 	UsePreamble bool
 	Content     []byte
 
-	sourceName string
-	fset       *token.FileSet
-	syntax     *ast.File
+	sourceName   string
+	fset         *token.FileSet
+	syntax       *ast.File
+	requireLines map[string]int
 }
 
-type Require struct{ Path, Version string }
+type Require struct {
+	Path    string `json:"path"`
+	Version string `json:"version"`
+}
 
 // Parse validates the Go file and entry point and reads standalone metadata
 // comments from the header before package main. Go syntax errors retain their
 // original source positions and underlying scanner.ErrorList.
 func Parse(s *app.Source) (*File, error) {
-	f := &File{SourcePath: s.Path(), sourceName: s.Path(), Content: s.Data(), fset: token.NewFileSet()}
+	f := &File{SourcePath: s.Path(), sourceName: s.Path(), Content: s.Data(), fset: token.NewFileSet(), requireLines: make(map[string]int)}
 	if bytes.HasPrefix(f.Content, []byte("#!")) {
 		for i, b := range f.Content {
 			if b == '\n' {
@@ -95,7 +105,7 @@ func Parse(s *app.Source) (*File, error) {
 			if comment.Pos() > f.syntax.Package {
 				return nil, lineError(pos.Line, ErrDirectiveAfterPackage)
 			}
-			if err := f.applyDirective(strings.TrimPrefix(comment.Text, "//gorn:")); err != nil {
+			if err := f.applyDirective(strings.TrimPrefix(comment.Text, "//gorn:"), pos.Line); err != nil {
 				return nil, lineError(pos.Line, err)
 			}
 		}
@@ -168,7 +178,7 @@ func (f *File) commentEnd(offset int) int {
 	return offset + bytes.Index(f.Content[offset:], []byte("*/")) + 2
 }
 
-func (f *File) applyDirective(directive string) error {
+func (f *File) applyDirective(directive string, line int) error {
 	parts := strings.Fields(directive)
 	if len(parts) == 0 {
 		return ErrInvalidDirective
@@ -181,6 +191,13 @@ func (f *File) applyDirective(directive string) error {
 		if f.GoVersion != "" {
 			return ErrDuplicateGo
 		}
+		var m modfile.File
+		if err := m.AddGoStmt(parts[1]); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidGoVersion, err)
+		}
+		if !validGoVersion(parts[1]) {
+			return fmt.Errorf("%w: unsupported Go version %q", ErrInvalidGoVersion, parts[1])
+		}
 		f.GoVersion = parts[1]
 	case "module":
 		if len(parts) != 2 {
@@ -189,11 +206,32 @@ func (f *File) applyDirective(directive string) error {
 		if f.Module != "" {
 			return ErrDuplicateModule
 		}
+		if err := module.CheckImportPath(parts[1]); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidModule, err)
+		}
 		f.Module = parts[1]
 	case "require":
 		if len(parts) != 3 || parts[2] == "latest" {
 			return ErrInvalidRequire
 		}
+		if first, exists := f.requireLines[parts[1]]; exists {
+			return fmt.Errorf("%w: %s first declared at line %d", ErrDuplicateRequire, parts[1], first)
+		}
+		if err := module.Check(parts[1], parts[2]); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidRequire, err)
+		}
+		if canonical := module.CanonicalVersion(parts[2]); canonical != parts[2] {
+			return fmt.Errorf("%w: use a concrete canonical version for %s", ErrInvalidRequire, parts[1])
+		}
+		if module.IsPseudoVersion(parts[2]) {
+			if _, err := module.PseudoVersionTime(parts[2]); err != nil {
+				return fmt.Errorf("%w: %w", ErrInvalidRequire, err)
+			}
+			if _, err := module.PseudoVersionBase(parts[2]); err != nil {
+				return fmt.Errorf("%w: %w", ErrInvalidRequire, err)
+			}
+		}
+		f.requireLines[parts[1]] = line
 		f.Requires = append(f.Requires, Require{Path: parts[1], Version: parts[2]})
 	case "preamble":
 		if len(parts) != 1 {
@@ -207,6 +245,19 @@ func (f *File) applyDirective(directive string) error {
 		return ErrInvalidDirective
 	}
 	return nil
+}
+
+func validGoVersion(v string) bool {
+	if !version.IsValid("go" + v) {
+		return false
+	}
+	// go/version accepts arbitrary prerelease kinds for ordering. Metadata
+	// supports the beta and rc toolchain releases, not invented release kinds.
+	if i := strings.IndexFunc(v, func(r rune) bool { return r >= 'a' && r <= 'z' }); i >= 0 {
+		kind := strings.TrimRight(v[i:], "0123456789")
+		return kind == "beta" || kind == "rc"
+	}
+	return true
 }
 
 // Dump writes source and metadata for verbose diagnostics on a best-effort basis.

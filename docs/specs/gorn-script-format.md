@@ -63,13 +63,23 @@ Names are case-sensitive; arguments are separated by whitespace without quoting.
 | --- | --- | --- | --- |
 | Go version | `//gorn:go <version>` | At most once | Sets the generated module's Go version; defaults to `1.26` |
 | Module | `//gorn:module <path>` | At most once | Sets the generated module path; defaults to `gorn.local/app` |
-| Requirement | `//gorn:require <path> <version>` | Repeatable | Adds a module requirement; `latest` is rejected |
+| Requirement | `//gorn:require <path> <version>` | One per module path | Adds a concrete module minimum under Go MVS; queries and duplicates are rejected |
 | Preamble | `//gorn:preamble` | At most once | Supplies the fixed ambient imports below |
 
-Version and module tokens are retained as supplied; Go's tooling performs
-remaining module/version validation and dependency resolution. Repeated require
-entries retain their order. Dependency pinning improvements are tracked
-separately from this source format.
+Go versions must satisfy Go module syntax and recognized Go release/beta/RC
+version syntax. Main module paths follow Go import-path syntax, including local
+names such as `task`. Requirement paths/versions use Go module validation,
+including major-version path compatibility, canonical semantic versions,
+prereleases, and valid pseudo-version timestamps and bases. Versions are retained as
+supplied after validation. Queries, branch names, bare revisions, partial versions,
+and noncanonical build metadata are rejected before invoking Go.
+
+Require entries retain their order; repeating a module path is an error even
+when the versions match. Errors identify the repeated line and the first
+declaration line. A concrete requirement is a minimum under Go MVS, not an upper
+bound. Existence, checksum validation, graph resolution, and helper pinning remain
+build/dependency responsibilities; syntax validation requires no Go executable,
+network, or writable cache.
 
 Standalone metadata comments after the package clause are errors, including
 comments inside functions. A trailing comment after Go code is ordinary Go, not
@@ -177,7 +187,10 @@ Gorn format errors use `*script.LineError`, preserving `errors.Is` and
 | `ErrInvalidMain` | Main lacks a body or has parameters, results, or type parameters |
 | `ErrDirectiveAfterPackage` | Standalone metadata occurs after the package keyword |
 | `ErrInvalidDirective` | Unknown directive or invalid argument count |
-| `ErrInvalidRequire` | Requirement lacks its path/version pair or uses `latest` |
+| `ErrInvalidRequire` | Missing path/version pair or invalid/noncanonical concrete module version |
+| `ErrInvalidGoVersion` | Invalid module Go version or unrecognized Go version syntax |
+| `ErrInvalidModule` | Invalid main module path |
+| `ErrDuplicateRequire` | Repeated requirement module path; reports the first declaration line |
 | `ErrDuplicateGo` | Repeated Go directive |
 | `ErrDuplicateModule` | Repeated module directive |
 | `ErrDuplicatePreamble` | Repeated preamble directive |

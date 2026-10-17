@@ -220,7 +220,7 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** dependency validation and helper bundling (07, 10),
+**Next implementation slice:** helper bundling and pinned dependency resolution (07),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
 Build identity, lifecycle, and cache ownership follow that dependency contract. Execution and source identity (04, 09), inspection safety (01), and
 source-format work (02–03, 25) are complete. Follow the
@@ -401,10 +401,17 @@ override returns a useful error. Document stdin-source versus runtime-stdin use.
 
 **P1 · Fix · S · Depends: 03, 07, 25 decision**
 
-GORN-V1-25 enforces the single-preamble rule. Remaining work covers
-Go/module/version syntax and duplicate/conflicting requirements, which are
-still largely retained as supplied. The selected validation policy is in the
-[build/runtime contract](../specs/gorn-build-runtime.md).
+**Status: implemented.** GORN-V1-25 enforces the single-preamble rule. Metadata
+validation now rejects invalid Go/module/version syntax and all duplicate
+requirement paths, with both declaration lines. Canonical prereleases, valid
+pseudo-versions, major-version module paths, and dotless main-module names are
+preserved. Go module validation uses the justified CLI-only `golang.org/x/mod`
+dependency; `sh` remains stdlib-only.
+
+The [build/runtime contract](../specs/gorn-build-runtime.md) records the selected
+policy and alternatives. Evidence: [metadata regressions](../../pkg/script/metadata_test.go)
+cover syntax, cardinality, original physical lines, underlying validation causes,
+and operation without Go. Dependency resolution/helper pinning remain item 07.
 Evidence: [directive handling](../../pkg/script/parser.go) and
 [format contract](../specs/gorn-script-format.md).
 
