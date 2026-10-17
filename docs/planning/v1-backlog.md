@@ -220,11 +220,11 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** binary export and cache management (12–13),
+**Next implementation slice:** cache management (13),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
 Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
 cache ownership/repair (05), profile (06), dependency/helper delivery (07),
-lifecycle (08), metadata validation (10), and progress (11) are implemented.
+lifecycle (08), metadata validation (10), progress (11), and binary export (12) are implemented.
 Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
 validation.
 
@@ -474,8 +474,8 @@ Output failures preserve their IO cause and stop pending Go work. Internal
 generated-source dumps require verbose; print flags remain deliberate inspection.
 The [selected decisions, alternatives, trade-offs, and behavioral evidence](../specs/gorn-build-runtime.md#progress-and-verification)
 include real installed-CLI cold/warm/bypass, slow source/dependency work, quiet
-errors, redaction, and stdout/runtime integrity. Lock-wait phases join this same
-reporter when item 05 implements locks.
+errors, redaction, and stdout/runtime integrity. Lock-wait phases use this same
+reporter through item 05’s cancellable locks.
 
 Acceptance: provide immediate phase information and periodic status during long
 work on stderr, with a documented quiet mode for automation. Stream useful Go
@@ -488,15 +488,26 @@ raw generated output is available deliberately rather than dumped by default.
 
 **P1 · Feature · M · Depends: 04–08**
 
-Implement `gorn build <script> -o <path>` using the same validated build pipeline
-as run. [The current command](../../pkg/cli/buildcmd.go) is a stub.
+**Status: implemented.** `gorn build <script> -o <path>` shares run's validated
+source/profile/dependency/leased-cache pipeline and never executes script code.
+Cold, warm and bypass exports are host-native pure-Go binaries; stdin works.
+Completed same-directory copies publish with atomic no-replace hard links or
+explicit `--force` native rename. Directories, symlinks and source aliases are
+refused; failures before publication preserve existing output. Windows adds
+`.exe` only without an explicit extension. Output parents must exist; mode 0755
+provides Unix execution, and Windows inherits destination-directory ACLs.
 
-Acceptance: build never executes the script; cold and cached exports work;
-output has the correct platform name and permissions. Publish output atomically
-with an explicit overwrite policy; failures preserve an existing destination.
-The binary works from another directory without gorn installed. Define target
-selection and cgo limits; cross-compilation is optional, not a prerequisite for
-host-target export. Help contains no advertised stub workflow.
+[The selected export contract](../specs/gorn-build-runtime.md#standalone-binary-export)
+records alternatives, filesystem/native-runtime assumptions, cancellation,
+commit-point semantics, permission and naming decisions. Evidence includes
+[unit policy and concurrent publication tests](../../pkg/cli/export_test.go) and
+[installed-CLI cold/warm/bypass, standalone and bundled-helper tests](../../build_integration_test.go).
+Inspection still returns before the extracted build preparation path. Public
+help advertises implemented build flags; cross-compilation remains outside v1.
+`mise run test` passes in the documented private Git/TMPDIR fixture; focused race
+coverage, target lint for Windows/macOS, dependency invariants and documentation
+checks pass. Independent review of the P0 preparation extraction found no
+behavioral regression. Native publication tests run in hosted CI before landing.
 
 ### GORN-V1-13 — Implement inspectable, bounded cache management
 

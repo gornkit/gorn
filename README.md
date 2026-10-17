@@ -57,7 +57,8 @@ Current CLI:
 ```sh
 gorn <script.gorn> [-- args...]        # shorthand for run
 gorn run [flags] <script.gorn> [-- args...]
-gorn build                             # stub (not implemented)
+gorn build app.gorn -o ./app            # compile a standalone host executable
+gorn build app.gorn -o ./app --force    # replace an existing regular output
 gorn cache                             # stub (not implemented)
 gorn --version
 
@@ -107,6 +108,15 @@ Concurrent cold invocations share one build, and active executables remain lease
 through use. `--no-cache` builds privately and cleans up afterward. Older cache
 layouts are left untouched. See the [cache contract](docs/specs/gorn-build-runtime.md#cache-publication-repair-and-management)
 for ownership, quarantine, cancellation and filesystem boundaries.
+
+`gorn build` compiles without executing the script, reusing a valid cache entry
+or building privately with `--no-cache`. The exported executable runs without Go
+or Gorn installed. Specify `-o`; its parent must exist. Existing files require
+`--force`; source files, directories, and symlinks are refused. Windows adds
+`.exe` when no extension is supplied; explicit extensions are preserved. Output
+publication is atomic, with filesystem hard-link support required for the default
+no-overwrite policy. See the [export contract](docs/specs/gorn-build-runtime.md#standalone-binary-export)
+for naming, permissions, native publication, and failure behavior.
 
 ## Writing scripts
 

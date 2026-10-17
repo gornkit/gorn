@@ -41,7 +41,10 @@ type runArgs struct {
 func (runArgs) Version() string { return (CLI{}).Version() }
 
 type buildArgs struct {
-	// TODO
+	Script  string `arg:"positional,required" placeholder:"script" help:"Script to compile without executing. Use - for stdin"`
+	Output  string `arg:"-o,--output,required" placeholder:"path" help:"Output executable path (parent must exist)"`
+	Force   bool   `arg:"--force" help:"Replace an existing regular output file"`
+	NoCache bool   `arg:"--no-cache" help:"Build fresh and bypass cached app output"`
 }
 
 type cacheArgs struct {
@@ -261,8 +264,9 @@ func scriptPath(script string) (string, error) {
 }
 
 func (b *buildArgs) Run(common *Common, stdout, stderr io.Writer) error {
-	return cli.Build(cli.BuildOpts{
-		Verbose: common.Verbose,
+	return cli.BuildContext(common.ctx, cli.BuildOpts{
+		Input: common.input, HelperSources: helperSources, Stdout: stdout, Stderr: stderr,
+		Verbose: common.Verbose, Quiet: common.Quiet, ScriptPath: b.Script, Output: b.Output, Force: b.Force, NoCache: b.NoCache,
 	})
 }
 
