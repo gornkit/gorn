@@ -133,3 +133,14 @@ startup work does not weaken integrity validation to meet its budget.
 GitHub workflow reuse and release mechanics follow the
 [reusable workflow documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
 and [release CLI](https://cli.github.com/manual/gh_release_create).
+
+## Stable release verification
+
+[v1.0.0](https://github.com/gornkit/gorn/releases/tag/v1.0.0), source commit
+`271d81b1fa6afaaff624e760b0282097abe709f0`, passes
+[all final release gates](https://github.com/gornkit/gorn/actions/runs/39047057727)
+and is promoted to Latest. All three native validation and downloaded-archive/
+public-module/helper smoke jobs pass. Local fresh-cache public installation and
+published-archive verification also pass; all seven asset checksums match.
+Published Linux warm p95 is 51.71–52.85 ms across three fixtures, fifty samples
+each, within the 100 ms reference-host budget. No tag or asset was replaced.

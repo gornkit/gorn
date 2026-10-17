@@ -1,24 +1,26 @@
 ---
 title: Gorn v1 Next Steps and Delivery Workflow
-status: draft
+status: authoritative
 type: plan
 updated: 2026-10-17
-summary: Remaining v1 implementation sequence, bounded planning and verification, and short-lived PR workflow.
+summary: Completed required v1 roadmap, published release evidence, optional deferrals and ongoing delivery workflow.
 ---
 
 # Gorn v1 next steps and delivery workflow
 
-## Recommendation
+## Delivery outcome
 
-Use the [v1 backlog](v1-backlog.md) as the roadmap. Deliver one coherent slice at
-a time through short-lived branches and PRs into `main`.
+The required v1 roadmap is complete in [v1.0.0](https://github.com/gornkit/gorn/releases/tag/v1.0.0),
+published and promoted to Latest after [all release gates passed](https://github.com/gornkit/gorn/actions/runs/39047057727).
+The [v1 backlog](v1-backlog.md) records implementation and verification evidence.
+Delivery used short-lived branches and green PRs into `main`.
 
 GORN-V1-25 establishes the standard Go source format and completes the related
 source-preservation and directive fixes in 02–03. The
 [implementation record](v1-standard-main-plan.md) captures the contract and
 verification evidence. GORN-V1-01 makes inspection independent of execution and
 cache access, with write-error propagation. GORN-V1-04/09 define and implement
-[execution and source identity](v1-execution-plan.md). **Build, dependency, and
+[execution and source identity](v1-execution-plan.md). Build, dependency, and
 lifecycle contracts (06–08) are selected in the
 [build/runtime design](../specs/gorn-build-runtime.md). GORN-V1-10 implements
 metadata syntax/cardinality validation. GORN-V1-07 delivers bundled/published
@@ -32,23 +34,28 @@ inventory and bounded, ownership-aware cache maintenance. GORN-V1-14/15
 stabilize exact arguments and supported shells. GORN-V1-18/19 deliver installed
 workflow coverage and executable onboarding. GORN-V1-20 defines compatibility
 and enforces the private implementation boundary. GORN-V1-22 records startup
-distributions and a measured reference-host budget. GORN-V1-21 delivers release
-tooling and a native/public-module-qualified `v1.0.0-rc.1`; stable publication
-remains.**
+distributions and a measured reference-host budget. GORN-V1-21 delivers five
+versioned archive targets, checksums, source install/version fallback, published
+helper qualification and gated stable promotion. Both candidate and stable native
+Linux/macOS/Windows release workflows pass.
 
-## Remaining sequence
+## Optional follow-up
 
-1. **Publish the stable release (21).** The [release contract](../specs/gorn-release.md)
-   records selected targets, alternatives, trade-offs, candidate/final ordering
-   and recovery. The published candidate passes all three native public-module/
-   archive smokes and the reference startup budget. Record candidate evidence
-   and stable install guidance, then repeat the pipeline for `v1.0.0`; Latest
-   promotion requires successful final native checks. Installed workflows/onboarding
-   (18–19), compatibility (20) and startup measurement (22) are delivered.
-   Optional 16–17 and 23–24 are deliberately deferred and do not hold v1 open.
+No required v1 implementation remains. Optional check/eject (16–17) and
+format/dependency convenience (23–24) are deferred with alternatives, trade-offs
+and revisit criteria in [the scope record](v1-backlog.md#scope-deliberately-deferred).
+They are not advertised CLI commands. Revisit them when authoring/adoption evidence
+justifies the additional source-mutation and maintenance surface.
 
-Follow item dependencies when refining this sequence. Each slice includes its
-behavioral tests and affected documentation. Preserve archived documents.
+The [release contract](../specs/gorn-release.md) records selected targets,
+candidate-first ordering, immutable recovery and the unavoidable public-module
+ordering risk. The stable pipeline verifies actual downloaded archives and public
+module/helper resolution on Linux amd64, macOS arm64 and Windows amd64; Linux
+arm64 and macOS amd64 are cross-built. Local verification independently matches
+all seven asset checksums. [Stable raw measurements](../benchmarks/2026-10-17-v1-startup-linux-amd64.json)
+record exact delivered bytes: warm p95 is 51.71–52.85 ms across three fixtures,
+fifty samples each, below the 100 ms reference-host budget. Signing, package
+managers and broader platform guarantees are not added to v1's selected scope.
 
 ## Planning and implementation
 
