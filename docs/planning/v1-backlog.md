@@ -220,12 +220,13 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** cancellation/process ownership and progress (08, 11),
+**Next implementation slice:** binary export and cache management (12–13),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
-Effective build-profile identity (06), dependency resolution/helper delivery (07),
-and metadata validation (10) are implemented. Cache ownership follows lifecycle. Execution and source identity (04, 09), inspection safety (01), and
-source-format work (02–03, 25) are complete. Follow the
-[delivery workflow](v1-next-steps.md) for bounded implementation and validation.
+Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
+cache ownership/repair (05), profile (06), dependency/helper delivery (07),
+lifecycle (08), metadata validation (10), and progress (11) are implemented.
+Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
+validation.
 
 ### GORN-V1-01 — Make inspection incapable of executing a script
 
@@ -301,18 +302,31 @@ Propagate failed writes for generated artifacts rather than reporting success.
 
 **P0 · Fix · M · Depends: 06; coordinate with 13**
 
-Checksum failure becomes a miss, but publication cannot replace the occupied
-invalid directory. A successful rebuild still fails to install. Existing tests
-explicitly expect that publication error. Profile/target/schema validation is
-delivered under item 06; occupied-entry repair, leases, and cleanup remain here.
-Evidence: [lookup](../../pkg/cache/cache.go), [manifest](../../pkg/cache/manifest.go),
-[publication](../../pkg/cache/emit.go), and [cache tests](../../pkg/cache/cache_test.go).
+**Status: implemented.** Full-key layout/manifest schema 3 separates independent
+ownership records from the validity gate. OS-backed mutation/activity/stage locks
+serialize builders and lease executables through use. Repair waits for active
+leases, quarantines invalid owned entries and atomically installs completed
+candidates. Unknown ownership and symlink substitutions are preserved/refused.
+Bypass builds avoid entry locks but retain private stage protection. Entry copies
+share idempotent private cleanup; payload-first deletion preserves ownership after
+Windows sharing violations. Prior schema-2 entries remain untouched.
 
-Acceptance: missing/corrupt manifest, wrong schema, absent binary, and checksum
-failure recover without manual deletion. Verify full build identity and supported
-target metadata. Concurrent rebuilds, lookup, repair, and cleanup never expose
-partial entries or remove another valid publication. Unknown or colliding entries
-are handled explicitly. Failed builds leave no executable partial result.
+Evidence: [selected protocol, alternatives and boundaries](../specs/gorn-build-runtime.md#cache-publication-repair-and-management),
+[publication/acquisition](../../pkg/cache/emit.go),
+[ownership/cleanup](../../pkg/cache/ownership.go),
+[behavioral tests](../../pkg/cache/ownership_test.go), and
+[Windows sharing-violation test](../../pkg/cache/cleanup_windows_test.go).
+Focused tests cover real two-process cold builds with exactly one compilation,
+coexisting readers, killed-holder lock release, canceled publication waits,
+corrupt/missing manifest and payload/profile/target repair, unknown records,
+symlinks, failed final publication, and safe copied-entry cleanup. Cache command
+enumeration, age/size selection and maintenance skip/report behavior remain 13;
+export uses the same lease contract under 12. Local validation passes
+`mise run test` in the documented private Git/TMPDIR fixture, focused race tests,
+Linux/macOS/Windows lint, both dependency invariants, and documentation checks.
+Independent P0 review corrected cancellation at publication and eager Windows
+file-identity capture; hosted execution verifies the OS-specific tests before
+landing.
 
 ### GORN-V1-06 — Key the cache on the effective build profile
 
@@ -323,7 +337,7 @@ keys actual installed Go and executing CLI bytes, normalized supported flags,
 helper identity, and resolver settings, and configures resolver/build subprocesses.
 The host-only pure-Go policy rejects unsupported flags, compiler hooks,
 experiments/FIPS, and source embed/local inputs. SDK/user/process precedence is
-explicit; mutable user GOENV is disabled afterward. Manifest schema 2 records the
+explicit; mutable user GOENV is disabled afterward. Manifest schema 3 records the
 actual compiler/profile with private values hashed; generation version 4 excludes
 old identity.
 
@@ -389,7 +403,7 @@ interrupt/termination statuses, explicit embedding IO ownership, reserved bundle
 helper coordination, foreground terminal restoration, and platform/job-control
 limits are documented with alternatives and rationale in the
 [lifecycle contract and linked evidence](../specs/gorn-build-runtime.md#cancellation-and-process-ownership).
-Cache lock/lease cancellation is completed with the locks in item 05; phase
+Cache lock/lease cancellation is delivered with the locks in item 05; phase
 progress remains item 11.
 
 Acceptance: define cancellation for dependency downloads, builds, scripts, and

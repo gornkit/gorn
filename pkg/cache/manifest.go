@@ -12,7 +12,7 @@ import (
 
 // manifestSchema versions the on-disk manifest. Bump it when the shape changes;
 // Lookup treats a mismatched schema as a miss, so old entries rebuild.
-const manifestSchema = 2
+const manifestSchema = 3
 
 const manifestName = "manifest.json"
 
@@ -50,7 +50,7 @@ func WriteManifest(dir string, m Manifest) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, manifestName), data, 0o600)
+	return os.WriteFile(filepath.Join(dir, manifestName), data, 0o600) //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 }
 
 // LoadManifest reads and parses the manifest.json in dir.

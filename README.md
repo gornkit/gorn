@@ -101,7 +101,12 @@ Start returns a process with repeatable/concurrent Wait and idempotent Kill;
 cancellation errors support `errors.Is` with context cancellation/deadline errors.
 
 The build cache lives under `$GORN_CACHE` (falling back to the user cache dir,
-then a temp dir).
+then a temp dir). Builds use full identity keys and OS-backed leases. Invalid
+owned entries rebuild automatically; unrecognized data is preserved and reported.
+Concurrent cold invocations share one build, and active executables remain leased
+through use. `--no-cache` builds privately and cleans up afterward. Older cache
+layouts are left untouched. See the [cache contract](docs/specs/gorn-build-runtime.md#cache-publication-repair-and-management)
+for ownership, quarantine, cancellation and filesystem boundaries.
 
 ## Writing scripts
 
