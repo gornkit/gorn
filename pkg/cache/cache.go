@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -115,9 +116,14 @@ func getRoot() (string, error) {
 	// 3. /tmp/gorn
 
 	if cacheRoot := os.Getenv("GORN_CACHE"); cacheRoot != "" {
-		if err := os.MkdirAll(cacheRoot, 0o700); err == nil { //nolint:gosec // G703: cacheRoot is an operator-set env var, not remote input.
-			return cacheRoot, nil
+		root, err := filepath.Abs(cacheRoot)
+		if err != nil {
+			return "", fmt.Errorf("resolve GORN_CACHE %q: %w", cacheRoot, err)
 		}
+		if err := os.MkdirAll(root, 0o700); err != nil { //nolint:gosec // G703: operator-selected cache root.
+			return "", fmt.Errorf("GORN_CACHE %q: %w", root, err)
+		}
+		return root, nil
 	}
 
 	userCacheDir, err := os.UserCacheDir()

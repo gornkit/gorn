@@ -20,8 +20,8 @@ API**. Add exact-argument process execution to that API. Keep the file format
 small and use ordinary Go modules and standard library IO. Fragments, a pipeline
 DSL, a filesystem utility suite, and a full language server can wait.
 
-GORN-V1-01, GORN-V1-25, and the related source-preservation and directive fixes
-in 02–03 are implemented, with linked verification evidence. Other items remain proposed
+GORN-V1-01–04, GORN-V1-09, and GORN-V1-25 are implemented, with linked
+verification evidence. Other items remain proposed
 unless their status records implementation. The backlog defines scope and
 acceptance criteria; it does not authorize implementation or publication.
 
@@ -220,8 +220,9 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** execution correctness (04, 09). Inspection safety
-(01), source-format work in 25, and the related 02–03 fixes are complete. Follow the
+**Next implementation slice:** build, dependency, and lifecycle contracts
+(06–08). Execution and source identity (04, 09), inspection safety (01), and
+source-format work (02–03, 25) are complete. Follow the
 [delivery workflow](v1-next-steps.md) for bounded implementation and validation.
 
 ### GORN-V1-01 — Make inspection incapable of executing a script
@@ -277,9 +278,15 @@ source lines, without a second Go grammar.
 
 **P0 · Fix · M · Depends: 01**
 
-A script calling `os.Exit(7)` currently makes gorn exit `1`: its execution error
-is wrapped and `main` converts every error to `1`.
-Evidence: [execution](../../pkg/cli/runcmd.go) and [CLI entry](../../main.go).
+**Status: implemented.** Ordinary child exits are preserved; POSIX signal exits
+map to `128 + signal`. Usage errors exit 2 on stderr; runner failures exit 1.
+Valid invocations never dump usage, and child failures retain their stdout/stderr
+without an added runner error line. Explicit and shorthand forms share help,
+version, separator, and verbose-flag behavior.
+
+The [execution/source identity decisions](v1-execution-plan.md) record alternatives,
+trade-offs, rationale, and verification. Evidence: [status mapping](../../pkg/cli/status.go),
+[CLI entry](../../main.go), and [installed-CLI tests](../../execution_integration_test.go).
 
 Acceptance: successful scripts exit `0`; ordinary child failures preserve their
 exit code. Define signal outcomes and distinct usage/build failures. Script
@@ -370,12 +377,17 @@ Document any unavoidable platform differences before stabilizing the API.
 
 **P1 · Fix · M · Depends: none**
 
-Comments describe resolved absolute source paths, but `app.New` retains the
-supplied path; CLI input is not made absolute. stdin is represented as
-`/dev/stdin` on every platform. A relative `GORN_CACHE` is also accepted, and an
-explicit unusable override silently falls back to another root.
-Evidence: [source](../../pkg/app/source.go), [source reading](../../pkg/cli/runcmd.go),
-and [cache location](../../pkg/cache/cache.go).
+**Status: implemented.** Source paths are absolute and lexically cleaned while
+retaining symlink spelling. stdin uses a distinct identity and synthetic absolute
+`stdin.gorn` diagnostic path in the invocation cwd. Source bytes are immutable
+after construction. Relative `GORN_CACHE` values resolve against invocation cwd;
+unusable explicit roots return their path and cause without fallback. Runtime
+cwd is preserved, and source stdin is consumed before runtime begins.
+
+See [decisions and verification](v1-execution-plan.md). Evidence:
+[source tests](../../pkg/app/source_test.go),
+[cache-location tests](../../pkg/cache/cache_test.go), and
+[installed-CLI tests](../../execution_integration_test.go).
 
 Acceptance: choose absolute source identity, a documented symlink policy, and a
 portable synthetic stdin name. Diagnostics identify the original source, not a

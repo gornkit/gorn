@@ -210,8 +210,20 @@ source and generates the requested artifacts without opening the build cache,
 invoking Go, or executing the script. It works independently of cache contents
 and writability; failed or short output writes return errors.
 
-Exit status, cancellation, cache repair, and broader build identity improvements
-are tracked separately in the [v1 backlog](../planning/v1-backlog.md).
+Ordinary child exit codes are preserved; POSIX child signals use `128 + signal`.
+Usage errors exit 2 with usage on stderr; source/build/start failures exit 1.
+Valid invocations do not print usage, and a child failure does not add a runner
+error line. Flags before `--` belong to gorn; use the separator to forward
+flag-like arguments, empty strings, and literal separators.
+
+Source identity uses absolute, cleaned paths without resolving symlinks. stdin
+source uses a distinct identity and synthetic `<invocation cwd>/stdin.gorn`
+diagnostic path; it consumes stdin before runtime begins. Runtime cwd stays the
+invocation cwd. Relative `GORN_CACHE` values resolve there, and unusable explicit
+overrides report an error rather than selecting another cache. The
+[execution/source identity record](../planning/v1-execution-plan.md) explains
+these decisions and their trade-offs. Cancellation, cache repair, and broader
+build identity remain in the [v1 backlog](../planning/v1-backlog.md).
 `gorn build` and `gorn cache` remain stubs; check, format, and eject commands are
 not implemented.
 

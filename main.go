@@ -28,6 +28,8 @@ type runArgs struct {
 	Args      []string `arg:"positional" placeholder:"args" help:"Arguments to pass to the script"`
 }
 
+func (runArgs) Version() string { return (CLI{}).Version() }
+
 type buildArgs struct {
 	// TODO
 }
@@ -52,8 +54,11 @@ func (CLI) Version() string {
 
 func main() {
 	if err := RunCLI(os.Args[1:], os.Stdout, os.Stderr, os.Exit); err != nil {
-		fmt.Fprintf(os.Stderr, "gorn: error: %v\n", err)
-		os.Exit(1)
+		var status *cli.StatusError
+		if !errors.As(err, &status) || !status.Silent {
+			fmt.Fprintf(os.Stderr, "gorn: error: %v\n", err)
+		}
+		os.Exit(cli.ExitStatus(err))
 	}
 }
 
@@ -70,14 +75,16 @@ func RunCLI(args []string, stdout, stderr io.Writer, exit func(int)) error {
 	case errors.Is(err, arg.ErrHelp): // found "--help" on command line
 		parser.WriteHelp(stdout)
 		exit(0)
+		return nil
 	case errors.Is(err, arg.ErrVersion): // found "--version" on command line
 		_, _ = fmt.Fprintln(stdout, cli.Version())
 		exit(0)
+		return nil
 	case err != nil:
 		if startsWithSubcommand(args) {
-			parser.WriteUsage(stdout)
+			parser.WriteUsage(stderr)
 			// RELEASE user facing error message
-			return fmt.Errorf("failed to parse subcommand: %w", err)
+			return usageError(fmt.Errorf("failed to parse subcommand: %w", err))
 		}
 		runCmd := runArgs{}
 		runParser, err := newParser(stdout, exit, &runCmd, &cmn)
@@ -85,24 +92,33 @@ func RunCLI(args []string, stdout, stderr io.Writer, exit func(int)) error {
 			// RELEASE user facing error message
 			return fmt.Errorf("failed to create run parser: %w", err)
 		}
-		if err := runParser.Parse(args); err != nil {
-			runParser.WriteUsage(stdout)
-			// RELEASE user facing error message
-			return fmt.Errorf("failed to parse run command: %w", err)
+		err = runParser.Parse(args)
+		switch {
+		case errors.Is(err, arg.ErrHelp):
+			runParser.WriteHelp(stdout)
+			exit(0)
+			return nil
+		case errors.Is(err, arg.ErrVersion):
+			_, _ = fmt.Fprintln(stdout, (CLI{}).Version())
+			exit(0)
+			return nil
+		case err != nil:
+			runParser.WriteUsage(stderr)
+			return usageError(fmt.Errorf("failed to parse run command: %w", err))
 		}
-		if err := runCmd.Run(&cmn, stdout, stderr); err != nil {
-			runParser.WriteUsage(stdout)
-			return err
-		}
-		return nil
+		return runCmd.Run(&cmn, stdout, stderr)
 	}
 
 	return runSelected(parser, &cmn, stdout, stderr)
 }
 
+func usageError(err error) error {
+	return &cli.StatusError{Code: 2, Err: err}
+}
+
 func startsWithSubcommand(args []string) bool {
 	for _, arg := range args {
-		if arg == "--verbose" || strings.HasPrefix(arg, "--verbose=") {
+		if arg == "-v" || arg == "--verbose" || strings.HasPrefix(arg, "--verbose=") || strings.HasPrefix(arg, "-v=") {
 			continue
 		}
 		return slices.Contains(subcommandNames, arg)

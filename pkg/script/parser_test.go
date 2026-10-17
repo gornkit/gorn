@@ -22,7 +22,7 @@ func TestParseMetadataAndPreserveSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.SourcePath != "task.gorn" || f.GoVersion != "1.26" || f.Module != "example.com/task" || !f.UsePreamble {
+	if f.SourcePath != s.Path() || f.GoVersion != "1.26" || f.Module != "example.com/task" || !f.UsePreamble {
 		t.Fatalf("metadata: %+v", f)
 	}
 	if len(f.Requires) != 2 || f.Requires[0] != (script.Require{Path: "example.com/a", Version: "v1.2.3"}) || f.Requires[1].Path != "example.com/b" {
