@@ -136,8 +136,17 @@ transitive parent module with the bundled helper is rejected with that remedy.
 Builds retain the effective module, checksums, and selected graph in the cache.
 Other offline cold builds require populated Go caches; warm Gorn hits avoid
 downloads. Dependencies requiring a higher Go minimum need an explicit
-`//gorn:go` update. Cold/bypass builds currently reject nonempty `GOFLAGS` while
-the build-profile allowlist and warm-hit profile validation are completed.
+`//gorn:go` update.
+
+Before cache lookup, Gorn identifies installed Go and freezes a host-only pure-Go
+profile. GOFLAGS supports tags, trimpath, and linker `-s`, `-w`, and
+`-X importpath.name=value`. Other flags, cgo/custom compilers, experiments, FIPS,
+and source embed/local compilation inputs are rejected. Identity includes the
+selected compiler, CLI generation, helper bytes, and supported settings; provenance
+hashes private linker/resolver values. Warm runs still require installed Go for
+profile discovery. Scripts keep ordinary runtime environment and arguments. See
+the [build/runtime contract](docs/specs/gorn-build-runtime.md) for syntax,
+alternatives, and limits.
 
 ## License
 

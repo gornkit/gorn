@@ -23,12 +23,13 @@ lifecycle contracts (06–08) are selected in the
 [build/runtime design](../specs/gorn-build-runtime.md). GORN-V1-10 implements
 metadata syntax/cardinality validation. GORN-V1-07 delivers bundled/published
 helper modes, pinned-graph resolution, and saved module/checksum provenance.
-Effective build-profile identity (06) is next.**
+GORN-V1-06 binds warm lookup, execution, and provenance to the installed
+toolchain/profile. Lifecycle and progress (08, 11) are next.**
 
 ## Remaining sequence
 
-1. **Implement the selected build/runtime contracts.** Complete build identity (06), then lifecycle
-   and progress (08, 11), and cache repair/leases (05). Keep profile, resolution,
+1. **Implement the selected build/runtime contracts.** Complete lifecycle and
+   progress (08, 11), then cache repair/leases (05). Keep profile, resolution,
    ownership, and provenance consistent before expanding build/cache commands.
 2. **Deliver core workflows (12–15).** Implement binary export, cache management,
    exact-argument execution, and supported shell behavior. Keep the `sh` package

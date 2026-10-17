@@ -185,20 +185,22 @@ MVS and checksum validation, then run `go build -mod=readonly -buildvcs=false
 A higher dependency Go minimum fails with a remedy to raise `//gorn:go`; the
 source minimum cannot silently change during resolution. Installed local Go and
 `GOWORK=off` keep workspace/toolchain discovery outside the generated module.
-Nonempty effective `GOFLAGS` is currently rejected before cold/bypass dependency
-resolution; warm-hit profile validation and the supported build-profile allowlist
-are tracked in GORN-V1-06.
+Before lookup, Gorn freezes a host-only pure-Go profile. Supported GOFLAGS are
+`-tags=<list>`, `-trimpath[=<bool>]`, and quoted `-ldflags` limited to `-s`, `-w`,
+and `-X importpath.name=value`. Unsupported inputs fail on warm runs too. Real
+source `//go:embed` and `import "C"` are unsupported, with original source lines;
+inspection remains independent of this build check.
 
 Completed builds retain effective `go.mod`, `go.sum`, and `dependencies.json`
 (schema 1: original `declared` requirements, `selected` path/version/Go-minimum
 records, and optional `helper_digest`). Bundled file names and exact bytes feed
-the helper digest and cache identity; generation version 3 invalidates older
+the helper digest and cache identity; generation version 4 invalidates older
 policy output. No companion lock file is required. Warm Gorn hits do not
 redownload modules; cold offline builds need populated Go caches except for
 stdlib/bundled-helper programs. Concrete requirements are minimums under MVS;
 reproducibility still depends on the selected toolchain and Go's trusted caches
 and module sources. See the [build/runtime contract](gorn-build-runtime.md) for
-alternatives, rationale, and remaining profile/lifecycle work.
+alternatives, rationale, the supported profile, and remaining lifecycle work.
 
 `//gorn:replace`, fragments/includes, and remote source inputs are not part of
 the format. Private-module settings continue through Go's resolver; credential
@@ -248,8 +250,8 @@ normal compiler behavior.
 Generation errors use `*script.GenerateError`. Preamble conflicts wrap a
 `LineError`; `Raw` is reserved for generated source that fails internal syntax
 validation. Invalid user Go is rejected during parsing, without a generated-source
-dump. Cache-key generation version `2` invalidates earlier wrapper-based builds;
-the manifest schema is unchanged.
+dump. Cache-key generation version `4` and manifest schema `2` invalidate earlier
+format/dependency/profile output and record actual build provenance.
 
 ## Runner status and tooling
 

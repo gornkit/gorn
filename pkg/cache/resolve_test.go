@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/gornkit/gorn/pkg/app"
+	"github.com/gornkit/gorn/pkg/buildprofile"
 	"github.com/gornkit/gorn/pkg/script"
 	"golang.org/x/mod/module"
 )
@@ -130,7 +131,16 @@ func buildFixture(t *testing.T, source string) (Entry, error) {
 			t.Fatal(err)
 		}
 	}
-	entry, err := Root(t.TempDir()).Build(s, g, true, bundle)
+	helperDigest := ""
+	if bundle != nil {
+		helperDigest = bundle.Digest()
+	}
+	profile, err := buildprofile.Discover(g.GoVersion, helperDigest)
+	if err != nil {
+		return Entry{}, err
+	}
+	s = s.WithBuildIdentity(profile.Identity())
+	entry, err := Root(t.TempDir()).Build(s, g, true, bundle, profile)
 	if err == nil {
 		t.Cleanup(func() { _ = entry.Remove() })
 	}
@@ -284,7 +294,7 @@ func TestEmptyEffectiveFlagsDoNotReactivatePersistedGOFLAGS(t *testing.T) {
 		t.Fatalf("persisted flags reactivated after explicit empty override: %v", err)
 	}
 	t.Setenv("GOFLAGS", "") // Empty falls back to the persisted flags and must fail.
-	if _, err := buildFixture(t, "package main\nfunc main(){}"); err == nil || !strings.Contains(err.Error(), "GOFLAGS is not supported") {
+	if _, err := buildFixture(t, "package main\nfunc main(){}"); err == nil || !strings.Contains(err.Error(), "unsupported GOFLAGS") {
 		t.Fatalf("persisted unsafe flags were not rejected: %v", err)
 	}
 }

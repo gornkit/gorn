@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"slices"
 	"strconv"
+	"strings"
 	"text/template"
 
 	"golang.org/x/mod/module"
@@ -48,6 +49,7 @@ type Generated struct {
 	Declared      []Require
 	Imports       []Import
 	BundleHelper  bool
+	EmbedLines    []int
 }
 
 // Import records a package request at its original physical source line.
@@ -144,7 +146,15 @@ func Generate(f *File) (*Generated, error) {
 	if _, err := parser.ParseFile(token.NewFileSet(), "main.gorn.go", generated, parser.SkipObjectResolution); err != nil {
 		return nil, &GenerateError{Err: err, Raw: generated}
 	}
-	return &Generated{MainGenerated: generated, ModGenerated: mod.Bytes(), SourcePath: f.SourcePath, GoVersion: modData.GoVersion, Module: modData.Module, Declared: slices.Clone(f.Requires), Imports: imports, BundleHelper: bundled}, nil
+	var embeds []int
+	for _, group := range f.syntax.Comments {
+		for _, comment := range group.List {
+			if directive, ok := strings.CutPrefix(comment.Text, "//go:embed"); ok && (directive == "" || strings.HasPrefix(directive, " ") || strings.HasPrefix(directive, "\t")) {
+				embeds = append(embeds, f.position(comment.Pos()).Line)
+			}
+		}
+	}
+	return &Generated{MainGenerated: generated, ModGenerated: mod.Bytes(), SourcePath: f.SourcePath, GoVersion: modData.GoVersion, Module: modData.Module, Declared: slices.Clone(f.Requires), Imports: imports, BundleHelper: bundled, EmbedLines: embeds}, nil
 }
 
 func writeSourceAnchor(out *bytes.Buffer, path string, line, column int) {
