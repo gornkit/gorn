@@ -92,19 +92,21 @@ func (CLI) Description() string {
 func (CLI) Version() string {
 	info, _ := debug.ReadBuildInfo()
 	moduleVersion := ""
+	localVCS := false
 	if info != nil {
 		moduleVersion = info.Main.Version
+		localVCS = slices.ContainsFunc(info.Settings, func(setting debug.BuildSetting) bool { return setting.Key == "vcs.revision" })
 	}
-	return "gorn " + selectedVersion(Version, moduleVersion)
+	return "gorn " + selectedVersion(Version, moduleVersion, localVCS)
 }
 
 // An explicit stamp wins. Source installations carry their selected module
 // version; ordinary local builds keep the established dev label.
-func selectedVersion(stamp, moduleVersion string) string {
+func selectedVersion(stamp, moduleVersion string, localVCS bool) string {
 	if stamp != "" {
 		return stamp
 	}
-	if moduleVersion != "" && moduleVersion != "(devel)" {
+	if !localVCS && moduleVersion != "" && moduleVersion != "(devel)" {
 		return moduleVersion
 	}
 	return "dev"

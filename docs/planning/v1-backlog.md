@@ -712,7 +712,12 @@ just-exited executable; its corruption fixture now replaces that inode and twent
 repeats pass. Final default `mise run test` passes in 28.80 s; Windows/macOS target
 lint, dependency/embedding/mirror boundaries, documentation checks and frozen
 archives pass. Hosted native CI and real published-module/asset smokes remain
-explicit delivery gates.
+explicit delivery gates. Initial native CI exposed Go's clean-checkout module
+version derivation, which the local worktree does not carry. Version selection now
+ignores VCS-derived local labels without an explicit stamp, preserving `dev` while
+retaining actual source-install tag/pseudoversion labels; both paths have coverage.
+A clean private Git directory reproduces the hosted build conditions and its real
+CLI/version/cache-identity checks pass; the final full gate passes in 28.74 s.
 
 Acceptance: prepare tagged, version-stamped binaries and checksums for the
 declared target matrix. Verify the installed command and `go install` path,

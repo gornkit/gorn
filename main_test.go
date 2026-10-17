@@ -280,16 +280,23 @@ func usageLine(help string) string {
 }
 
 func TestSelectedVersion(t *testing.T) {
-	for _, tc := range []struct{ stamp, module, want string }{
-		{"v1.0.0", "v1.0.0-rc.1", "v1.0.0"},
-		{"", "v1.0.0-rc.1", "v1.0.0-rc.1"},
-		{"dev", "v1.0.0", "dev"},
-		{"dev", "(devel)", "dev"},
-		{"", "v1.0.0", "v1.0.0"},
-		{"dev", "", "dev"},
+	for _, tc := range []struct {
+		stamp, module string
+		localVCS      bool
+		want          string
+	}{
+		{"v1.0.0", "v1.0.0-rc.1", true, "v1.0.0"},
+		{"", "v1.0.0-rc.1", false, "v1.0.0-rc.1"},
+		{"dev", "v1.0.0", false, "dev"},
+		{"dev", "(devel)", true, "dev"},
+		{"", "v1.0.0", false, "v1.0.0"},
+		{"", "v0.0.0-20261017153341-bbb0b6083aef", true, "dev"},
+		{"", "v1.0.0", true, "dev"},
+		{"", "v0.0.0-20261017153341-bbb0b6083aef", false, "v0.0.0-20261017153341-bbb0b6083aef"},
+		{"dev", "", false, "dev"},
 	} {
-		if got := selectedVersion(tc.stamp, tc.module); got != tc.want {
-			t.Errorf("selectedVersion(%q, %q) = %q, want %q", tc.stamp, tc.module, got, tc.want)
+		if got := selectedVersion(tc.stamp, tc.module, tc.localVCS); got != tc.want {
+			t.Errorf("selectedVersion(%q, %q, %v) = %q, want %q", tc.stamp, tc.module, tc.localVCS, got, tc.want)
 		}
 	}
 }

@@ -40,9 +40,14 @@ helper scripts explicitly select `//gorn:go 1.26.4` (or higher), because the par
 module floor exceeds the default script language floor of 1.26.
 
 Explicit linker version stamps take precedence; otherwise source installs report
-Go's module version. Unversioned local builds report `dev`. This preserves the
+Go's module version. Builds carrying local VCS revision settings report `dev`
+without an explicit stamp, even when Go derives a module version from the checkout.
+This preserves the
 local development contract and makes `go install ...@v1.0.0` identify its version.
 The CLI binary digest remains part of build identity regardless of the label.
+Go can [derive main-module versions from VCS](https://go.dev/doc/go1.24);
+module version alone therefore cannot distinguish a source install from a clean
+checkout. The `vcs.revision` build setting keeps those two cases separate.
 
 ## Mechanical procedure and gates
 
