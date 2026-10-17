@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags: ['v1.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to verify again (no rebuilding/uploading)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: refs/tags/${{ inputs.tag || github.ref_name }}
+
+  publish:
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v4
+      - name: Build tagged archives and checksums
+        run: go run ./internal/release build -version "$RELEASE_TAG" -dir "$RUNNER_TEMP/dist"
+      - name: Publish candidate assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP"/dist/* \
+            --verify-tag --prerelease --latest=false \
+            --title "Gorn $RELEASE_TAG" --notes-file "$RUNNER_TEMP/dist/RELEASE_NOTES.md"
+
+  verify:
+    if: always() && needs.validate.result == 'success' && (needs.publish.result == 'success' || github.event_name == 'workflow_dispatch')
+    needs: [validate, publish]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - uses: jdx/mise-action@v4
+      - name: Download and smoke actual release and public Go module
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          target="$(go env GOOS)_$(go env GOARCH)"
+          extension=tar.gz
+          if [[ "$target" == windows_* ]]; then extension=zip; fi
+          gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/download" \
+            --pattern "gorn_${RELEASE_TAG}_${target}.${extension}" \
+            --pattern SHA256SUMS.txt --pattern BUILD_INFO.json --pattern RELEASE_NOTES.md
+          go run ./internal/release verify -version "$RELEASE_TAG" -dir "$RUNNER_TEMP/download" -published
+
+  promote:
+    if: always() && needs.verify.result == 'success'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Promote only verified stable versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [[ "$RELEASE_TAG" =~ ^v1\.[0-9]+\.[0-9]+$ ]]; then
+            gh release edit "$RELEASE_TAG" --verify-tag --prerelease=false --latest=true
+          else
+            echo 'Candidate verified; retained as prerelease.'
+          fi

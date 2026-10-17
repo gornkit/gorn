@@ -22,8 +22,10 @@ gorn --version
 Put Go's binary directory on PATH: `go env GOBIN` if set, otherwise the `bin`
 directory under `go env GOPATH`. These Go commands work in Unix shells and
 PowerShell. `@main` follows development and can change; an approved versioned
-release will provide a fixed install target. Source installs can currently report
-`gorn dev`. Downloading Go modules normally needs network access on first install.
+release will provide a fixed install target. Source installs report Go's selected
+module version; explicit release stamps take precedence. Downloading Go modules
+normally needs network access on first install. The [release contract](docs/specs/gorn-release.md)
+defines binary targets, checksum verification and candidate promotion.
 
 The runner needs installed Go on every run, including warm hits, to validate its
 build profile. An exported executable needs neither Go nor Gorn, but still needs
@@ -148,6 +150,8 @@ installed. To select a published helper, pin the parent module explicitly as
 [documented in the format](docs/specs/gorn-script-format.md#dependencies).
 
 ## Contracts and development
+
+- [Releases and upgrades](docs/specs/gorn-release.md): archives, checksums and verified installation.
 
 - [Startup measurements](docs/specs/gorn-startup.md): reference distributions, budget and reproduction.
 - [Compatibility](docs/specs/gorn-compatibility.md): supported public surfaces and upgrades.
