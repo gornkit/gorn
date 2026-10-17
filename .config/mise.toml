@@ -25,3 +25,7 @@ version="${GORN_VERSION:-$(git describe --tags --dirty --always 2>/dev/null || p
 go build -ldflags "-X main.Version=${version}" -o gorn .
 '''
 depends = ["lint:run"]
+
+[tasks.bench]
+run = "go run ./internal/startupbench -gorn ./gorn"
+depends = ["build"]

@@ -31,18 +31,16 @@ GORN-V1-12 delivers standalone binary export. GORN-V1-13 delivers read-only
 inventory and bounded, ownership-aware cache maintenance. GORN-V1-14/15
 stabilize exact arguments and supported shells. GORN-V1-18/19 deliver installed
 workflow coverage and executable onboarding. GORN-V1-20 defines compatibility
-and enforces the private implementation boundary. Startup measurement (22) and
-releases (21) remain.**
+and enforces the private implementation boundary. GORN-V1-22 records startup
+distributions and a measured reference-host budget. Releases (21) remain.**
 
 ## Remaining sequence
 
-1. **Measure startup (22).** Record cold, populated-Go-cache, warm and bypass
-   distributions for plain, preamble and dependency fixtures; select a measured
-   reference-host budget and preserve integrity checks.
-2. **Deliver the release candidate (21).** Prepare and verify versioned binaries,
-   checksums, source installation and published helper resolution after 22.
-   Required installed workflows/onboarding (18–19) and compatibility (20) are
-   delivered. Optional 16–17 and 23–24 do not hold v1 open.
+1. **Deliver the release candidate (21).** Prepare and verify versioned binaries,
+   checksums, source installation and published helper resolution. Recheck the
+   candidate against the measured startup budget. Installed workflows/onboarding
+   (18–19), compatibility (20) and startup measurement (22) are delivered.
+   Optional 16–17 and 23–24 are deliberately deferred and do not hold v1 open.
 
 Follow item dependencies when refining this sequence. Each slice includes its
 behavioral tests and affected documentation. Preserve archived documents.
