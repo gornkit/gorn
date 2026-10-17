@@ -19,14 +19,15 @@ source-preservation and directive fixes in 02–03. The
 verification evidence. GORN-V1-01 makes inspection independent of execution and
 cache access, with write-error propagation. GORN-V1-04/09 define and implement
 [execution and source identity](v1-execution-plan.md). **Build, dependency, and
-lifecycle contracts (06–08) are next.**
+lifecycle contracts (06–08) are selected in the
+[build/runtime design](../specs/gorn-build-runtime.md); implementing them is next.**
 
 ## Remaining sequence
 
-1. **Settle build, dependency, and lifecycle contracts (06–08).** Define effective
-   build inputs, dependency resolution, helper versioning, cancellation, and
-   process ownership before expanding build/cache workflows. Use those decisions
-   to complete cache repair (05), validation (10), and progress reporting (11).
+1. **Implement the selected build/runtime contracts.** Start with dependency
+   validation and helper bundling (07, 10), then build identity (06), lifecycle
+   and progress (08, 11), and cache repair/leases (05). Keep profile, resolution,
+   ownership, and provenance consistent before expanding build/cache commands.
 2. **Deliver core workflows (12–15).** Implement binary export, cache management,
    exact-argument execution, and supported shell behavior. Keep the `sh` package
    stdlib-only and independent of the CLI dependency graph.
