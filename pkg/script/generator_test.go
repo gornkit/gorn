@@ -189,20 +189,24 @@ func TestFormatSpecificationExamplesCompile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles documentation examples")
 	}
-	doc, err := os.ReadFile("../../docs/specs/gorn-script-format.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	examples := regexp.MustCompile("(?s)```go\\n(.*?)\\n```").FindAllSubmatch(doc, -1)
-	if len(examples) == 0 {
-		t.Fatal("no Go examples found")
-	}
-	for i, example := range examples {
-		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
-			dir, g := generatedModule(t, string(example[1]))
-			writeFile(t, filepath.Join(dir, "main.gorn.go"), string(g.MainGenerated))
-			runGo(t, dir, "mod", "tidy")
-			runGo(t, dir, "build", "-o", "program"+exeSuffix(), ".")
+	for _, path := range []string{"../../docs/specs/gorn-script-format.md", "../../README.md"} {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			doc, err := os.ReadFile(path) //nolint:gosec // G304: fixed authoritative documentation paths, not caller input.
+			if err != nil {
+				t.Fatal(err)
+			}
+			examples := regexp.MustCompile("(?s)```go\\n(.*?)\\n```").FindAllSubmatch(doc, -1)
+			if len(examples) == 0 {
+				t.Fatal("no Go examples found")
+			}
+			for i, example := range examples {
+				t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+					dir, g := generatedModule(t, string(example[1]))
+					writeFile(t, filepath.Join(dir, "main.gorn.go"), string(g.MainGenerated))
+					runGo(t, dir, "mod", "tidy")
+					runGo(t, dir, "build", "-o", "program"+exeSuffix(), ".")
+				})
+			}
 		})
 	}
 }
@@ -210,6 +214,12 @@ func TestFormatSpecificationExamplesCompile(t *testing.T) {
 func generatedModule(t *testing.T, source string) (string, *script.Generated) {
 	t.Helper()
 	dir := t.TempDir()
+	// Preserve ordinary Go VCS stamping while isolating compiler-oracle builds
+	// from unrelated/invalid ancestor .git markers on a developer's temp root.
+	git := exec.Command("git", "-c", "init.defaultBranch=gorn-fixture", "init", "--quiet", "--template=", dir) //nolint:gosec // G204: private t.TempDir fixture, with no repository hooks/templates.
+	if out, err := git.CombinedOutput(); err != nil {
+		t.Fatalf("initialize private Git compiler fixture: %v\n%s", err, out)
+	}
 	path := filepath.Join(dir, "original source.gorn")
 	writeFile(t, path, source)
 	s, err := app.New(path, []byte(source))

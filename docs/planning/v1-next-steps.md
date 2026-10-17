@@ -29,20 +29,22 @@ helper API from 14. GORN-V1-11 delivers immediate phases, bounded diagnostic
 streaming, heartbeats, and quiet behavior. GORN-V1-05 delivers cache repair, independent ownership and cancellable leases.
 GORN-V1-12 delivers standalone binary export. GORN-V1-13 delivers read-only
 inventory and bounded, ownership-aware cache maintenance. GORN-V1-14/15
-stabilize exact arguments and supported shells. Installed workflows and
-onboarding (18–19) are next.**
+stabilize exact arguments and supported shells. GORN-V1-18/19 deliver installed
+workflow coverage and executable onboarding. Compatibility (20), startup
+measurement (22), and releases (21) remain.**
 
 ## Remaining sequence
 
-1. **Keep the delivered build/runtime contracts aligned.** Profile, resolution,
-   lifecycle, progress and ownership (05–08, 11) now underpin command workflows.
-2. **Deliver core workflows (12–15).** Implement binary export, cache management,
-   exact-argument execution, and supported shell behavior. Keep the `sh` package
-   stdlib-only and independent of the CLI dependency graph.
-3. **Complete release gates (18–22).** Extend installed-CLI and cross-platform
-   tests, finish onboarding, review public APIs, measure startup, and verify
-   installation and published dependency resolution. Optional items 16–17 and
-   23–24 do not hold v1 open.
+1. **Define the compatibility surface (20).** Set the supported public API,
+   implementation-package boundary, Go floor and upgrade/cache transition policy.
+   Enforce the `sh`/CLI dependency invariants in CI.
+2. **Measure startup (22).** Record cold, populated-Go-cache, warm and bypass
+   distributions for plain, preamble and dependency fixtures; select a measured
+   reference-host budget and preserve integrity checks.
+3. **Deliver the release candidate (21).** Prepare and verify versioned binaries,
+   checksums, source installation and published helper resolution after 20/22.
+   Required installed workflows and executable onboarding (18–19) are delivered.
+   Optional 16–17 and 23–24 do not hold v1 open.
 
 Follow item dependencies when refining this sequence. Each slice includes its
 behavioral tests and affected documentation. Preserve archived documents.
@@ -75,11 +77,11 @@ dependency invariants: `sh` is stdlib-only, and the root/`pkg/` graph excludes
 `sh`. Report environmental failures separately from regressions.
 
 The [format implementation record](v1-standard-main-plan.md) documents a Linux
-validation-host issue: invalid `.git` markers under temporary-directory roots
-prevented generated-module builds from obtaining VCS status. A private valid Git
-fixture used as TMPDIR allowed the full gate to pass with normal VCS stamping.
-Use that isolation if the same condition recurs; preserve evidence of the default
-environment failure and avoid global `GOFLAGS` overrides.
+validation-host issue: invalid ancestor `.git` markers under temporary roots
+prevented ordinary-Go compiler fixtures from obtaining VCS status. GORN-V1-18
+now initializes private valid Git roots inside those fixtures, retaining normal
+VCS stamping and allowing the default gate without external TMPDIR/GOFLAGS
+overrides. Preserve that isolation in compiler-oracle tests.
 
 ## Worktrees, branches, and PRs
 

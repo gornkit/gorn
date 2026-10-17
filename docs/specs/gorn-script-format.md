@@ -200,7 +200,7 @@ redownload modules; cold offline builds need populated Go caches except for
 stdlib/bundled-helper programs. Concrete requirements are minimums under MVS;
 reproducibility still depends on the selected toolchain and Go's trusted caches
 and module sources. See the [build/runtime contract](gorn-build-runtime.md) for
-alternatives, rationale, the supported profile, and remaining lifecycle work.
+alternatives, rationale, the supported profile, and process ownership.
 
 `//gorn:replace`, fragments/includes, and remote source inputs are not part of
 the format. Private-module settings continue through Go's resolver; credential
@@ -250,7 +250,7 @@ normal compiler behavior.
 Generation errors use `*script.GenerateError`. Preamble conflicts wrap a
 `LineError`; `Raw` is reserved for generated source that fails internal syntax
 validation. Invalid user Go is rejected during parsing, without a generated-source
-dump. Cache-key generation version `4` and manifest schema `2` invalidate earlier
+dump. Cache-key generation version `4` and manifest schema `3` invalidate earlier
 format/dependency/profile output and record actual build provenance.
 
 ## Runner status and tooling
@@ -275,10 +275,12 @@ diagnostic path; it consumes stdin before runtime begins. Runtime cwd stays the
 invocation cwd. Relative `GORN_CACHE` values resolve there, and unusable explicit
 overrides report an error rather than selecting another cache. The
 [execution/source identity record](../planning/v1-execution-plan.md) explains
-these decisions and their trade-offs. Cancellation, cache repair, and broader
-build identity remain in the [v1 backlog](../planning/v1-backlog.md).
-`gorn build` and `gorn cache` remain stubs; check, format, and eject commands are
-not implemented.
+these decisions and their trade-offs. The [build/runtime contract](gorn-build-runtime.md)
+defines implemented cancellation, profile identity, ownership and repair.
+`gorn build` exports a standalone host binary without executing the source;
+`gorn cache` supports path/list/clean/prune with explicit mutation and activity
+protection. See the [workflow guide](gorn-workflows.md). Check, format, and eject
+commands remain optional backlog items.
 
 A complete Go body improves compatibility with Go syntax tooling, but `.gorn`
 may still require an editor language association. Shebangs need preprocessing

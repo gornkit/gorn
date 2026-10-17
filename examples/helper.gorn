@@ -1,0 +1,6 @@
+//gorn:preamble
+package main
+
+func main() {
+    sh.Cmd("go", "version").Exec().OrExit()
+}

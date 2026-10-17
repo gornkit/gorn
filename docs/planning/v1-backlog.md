@@ -220,11 +220,12 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** installed workflows and onboarding (18–19),
+**Next implementation slice:** compatibility surface (20),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
 Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
 cache ownership/repair (05), profile (06), dependency/helper delivery (07),
-lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13), and shell/exact-argv stabilization (14–15) are implemented.
+lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13), shell/exact-argv stabilization (14–15), installed workflows
+(18), and onboarding (19) are implemented.
 Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
 validation.
 
@@ -612,40 +613,54 @@ assets and any provenance files. Multi-file includes are unnecessary.
 
 **P1 · Validation · L · Depends: start now; complete after 01–15**
 
-GORN-V1-25 adds real CLI cold/warm/bypass execution, stdin, arguments, IO,
-and cold inspection coverage. GORN-V1-01 extends inspection coverage across
-warm, bypass, and corrupt caches, missing Go, unusable cache paths, and output
-failures. Generator tests compile plain, preamble, and
-documentation examples using a local module replacement where needed.
-Installed-CLI and cross-platform coverage of the remaining workflows is still
-required. Evidence: [execution tests](../../run_integration_test.go),
-[CLI tests](../../main_test.go), [cache tests](../../pkg/cache/cache_test.go),
-and [generator tests](../../pkg/script/generator_test.go).
+**Status: implemented.** Installed tests cover plain and bundled-helper scripts,
+explicit dependency cold/warm/bypass builds, arguments/stdin/cwd/status,
+inspection safety, corrupt-manifest/binary repair, concurrent publication,
+cache maintenance and standalone exports. Controlled loopback dependencies keep
+resolution deterministic. After cache population, the proxy deliberately fails;
+warm/bypass/repair/export still succeed without requests. Concurrent installed
+CLIs report one miss and one hit. Saved graph and repair quarantine are asserted.
 
-Acceptance: use a built CLI in isolated directories for plain, preamble, and
-explicit dependency scripts. Cover cold/warm/bypass, stdin, args, IO, status,
-inspection safety, corruption repair, concurrent builds, cancellation, and
-exported binaries. Use controlled local dependencies for deterministic tests and
-a separate release smoke test for actual published dependency resolution.
-Run relevant behavior on all supported OSes and race checks where supported.
-Investigate the observed VCS-stamping failure; keep the ordinary project gate
-passing without requiring a developer's global `GOFLAGS` override.
+Evidence: [dependency workflows](../../dependency_workflow_test.go),
+[onboarding workflows](../../workflow_integration_test.go),
+[execution](../../execution_integration_test.go),
+[export](../../build_integration_test.go), [cache](../../cache_integration_test.go),
+[profile](../../profile_integration_test.go),
+[progress](../../progress_integration_test.go), and existing process/cache tests.
+POSIX installed cancellation/terminal tests and native Windows backend tree/fallback
+and sharing-failure tests run on their supported hosts; their guarantees remain
+platform-specific. Actual published-helper resolution remains release gate 21. Default `mise run test`
+passes without environment overrides; focused installed-workflow race checks,
+Windows/macOS target lint, dependency invariants and documentation checks pass.
+Native three-platform CI remains the landing gate.
+
+Ordinary-Go compiler-oracle fixtures now initialize private valid Git roots.
+This resolves the observed invalid ancestor .git issue at its test boundary,
+retains normal VCS stamping, and removes the need for caller TMPDIR/global
+GOFLAGS overrides. The runner does not require Git for stdlib/bundled execution.
 
 ### GORN-V1-19 — Make the first-run documentation executable
 
 **P1 · Improvement · M · Depends: 07, 12, 14–15, 18**
 
-The README provides contributor setup but no complete end-user install/start
-flow. GORN-V1-25 replaces obsolete helper calls in the authoritative format
-examples with existing APIs or standard-library code and compile-checks those
-examples. Complete the end-user onboarding and workflow documentation below.
-Evidence: [README](../../README.md) and [format examples](../specs/gorn-script-format.md).
+**Status: implemented.** README now leads with Go/PATH installation, a stdlib-only
+first script, explicit Windows invocation and Unix shebang, then run/build/cache
+and optional helpers/dependencies. The authoritative
+[workflow guide](../specs/gorn-workflows.md) documents permissions, network/offline
+behavior, host dependence, stdio/cwd/status, cancellation and troubleshooting.
+Alternatives and rationale explain stdlib-first onboarding, mutable development
+installation before an approved release, export as the no-Go runtime boundary,
+and deterministic tests versus published release smoke.
 
-Acceptance: install instructions, Go/PATH prerequisites, a working first script,
-Unix shebang and Windows invocation, dependencies, build/cache usage, and a
-troubleshooting path are tested. Explain host dependence, permissions, expected
-network access, cwd, and stdio. Compile/run maintained examples in CI. Publish
-current runner/cache/`sh` contracts outside the archive; keep archived docs frozen.
+[Maintained examples](../../examples/hello.gorn) and their
+[helper counterpart](../../examples/helper.gorn) match README source and execute
+through the built CLI. Tests also exercise bypass, inspection, JSON cache preview,
+export, no-Go standalone execution and a real Unix shebang. All complete Go blocks
+in README and the format specification compile in
+[documentation tests](../../pkg/script/generator_test.go).
+Current format, runner/cache, workflow and helper contracts live outside the
+frozen archive. Versioned distribution and source-install version reporting
+remain in 21; supporting implementation packages and API policy remain in 20.
 
 ### GORN-V1-20 — Define the v1 compatibility surface
 
