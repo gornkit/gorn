@@ -88,11 +88,10 @@ func Run(o RunOpts) error {
 	// (e.g. a preamble import conflict) is surfaced, even for a plain run.
 	gen, err := script.Generate(file)
 	if err != nil {
-		// A format failure carries the raw, unformatted main file; dump it to
-		// stderr for debugging before surfacing the error.
+		// Internal generation failures carry the generated file for debugging.
 		var genErr *script.GenerateError
 		if errors.As(err, &genErr) && genErr.Raw != nil {
-			_, _ = fmt.Fprintln(o.Stderr, "--- generated main.go (unformatted) ---")
+			_, _ = fmt.Fprintln(o.Stderr, "--- invalid generated main.go ---")
 			_, _ = fmt.Fprint(o.Stderr, string(genErr.Raw))
 		}
 		return fmt.Errorf("generate: %w", err)
@@ -153,7 +152,7 @@ func printArtifacts(o RunOpts, gen *script.Generated) {
 		if withHeaders {
 			_, _ = fmt.Fprintln(o.Stdout, "// --- main.go ---")
 		}
-		_, _ = fmt.Fprint(o.Stdout, string(gen.MainFileFormatted))
+		_, _ = fmt.Fprint(o.Stdout, string(gen.MainGenerated))
 	}
 }
 

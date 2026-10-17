@@ -16,8 +16,9 @@ and implementing the ordinary-Go source format; do not repair the old wrapper
 as a separate prerequisite when the approved format change will remove it.
 
 This records the recommended workflow. It does not start implementation, create
-a Goal, or authorize commits, pushes, or publishing. The source-format target
-remains proposed until its contract is approved.
+a Goal, or authorize commits, pushes, or publishing. GORN-V1-25 has since been approved and implemented locally; its
+[implementation record](v1-standard-main-plan.md) tracks validation and review.
+The remaining backlog stays subject to its recorded status and approval boundaries.
 
 ## Sequence
 
