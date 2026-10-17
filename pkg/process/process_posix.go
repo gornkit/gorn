@@ -23,6 +23,8 @@ type platformProcess struct {
 	child      int32
 }
 
+var errProcessOwnershipLost = errors.New("child ownership lost")
+
 func prepareProcess(cmd *exec.Cmd, options processOptions) (*platformProcess, error) {
 	p := &platformProcess{group: true}
 	if options.inherit {

@@ -18,10 +18,7 @@ const (
 	ownershipVariable = "GORN_PROCESS_GROUP"
 )
 
-var (
-	errProcessKilled        = errors.New("command killed")
-	errProcessOwnershipLost = errors.New("child ownership lost")
-)
+var errProcessKilled = errors.New("command killed")
 
 type processPlatform interface {
 	observe(*exec.Cmd) (bool, bool, error)
@@ -32,9 +29,9 @@ type processPlatform interface {
 }
 
 type processOptions struct {
-	inherit  bool
-	mark     bool
-	terminal bool
+	inherit  bool //nolint:unused // POSIX-only group ownership; shared backend options also compile on Windows.
+	mark     bool //nolint:unused // POSIX-only bundled group marker.
+	terminal bool //nolint:unused // POSIX-only foreground terminal transfer.
 }
 
 type processCore struct {
