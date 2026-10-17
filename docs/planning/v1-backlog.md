@@ -220,11 +220,11 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** cache management (13),
+**Next implementation slice:** shell/API stabilization (14–15),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
 Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
 cache ownership/repair (05), profile (06), dependency/helper delivery (07),
-lifecycle (08), metadata validation (10), progress (11), and binary export (12) are implemented.
+lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13) are implemented.
 Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
 validation.
 
@@ -513,17 +513,30 @@ behavioral regression. Native publication tests run in hosted CI before landing.
 
 **P1 · Feature · M · Depends: 05–06, 09**
 
-Implement `cache path`, `cache list`, `cache clean`, and `cache prune`.
-[The current command](../../pkg/cli/cachecmd.go) is a stub. Start with explicit
-cleanup; automatic background eviction is unnecessary for v1.
+**Status: implemented.** `cache path/list/clean/prune` use shared read-only root
+selection and require no Go. Schema-1 JSON reports ownership separately from
+validity, sanitized recorded provenance, complete/incomplete logical sizes, and
+separate entry/stage/quarantine/unmanaged/metadata totals. Clean resolves one key
+or explicitly selects all owned data; age/size prune uses build time, finite
+oldest-first selection, explicit `--yes`, read-only prediction, nonblocking
+activity protection, generation revalidation and final unmet-budget reporting.
+Unknown data and old layouts remain untouched. Windows sharing failures retain
+ownership for later retry.
 
-Acceptance: list reports identity, source, size, and recorded build provenance;
-provide stable JSON where results are intended for automation. Define clean and
-age/size-based prune semantics, including whether recency is build time or usage.
-Support dry-run and explicit noninteractive deletion. Delete only gorn-owned
-entries under the resolved cache root, never Go's caches or unrelated paths.
-Coordinate active builds/runs and Windows executable locking; collect abandoned
-temporary directories safely. Bad entries remain diagnosable.
+[The authoritative contract](../specs/gorn-build-runtime.md#cache-inspection-and-maintenance)
+records alternatives, trade-offs and rationale for deterministic root selection,
+logical bytes, build age, explicit mutation, preview limits, ownership authority,
+nonblocking cleanup and bounded concurrent maintenance. Evidence includes
+[inventory](../../pkg/cache/inventory_test.go),
+[maintenance](../../pkg/cache/maintain_test.go),
+[Windows deletion failures](../../pkg/cache/maintain_windows_test.go),
+[CLI contracts](../../pkg/cli/cachecmd_test.go), and
+[installed no-Go/active-run tests](../../cache_integration_test.go).
+Independent destructive-path review found and corrected unreadable-namespace
+membership accounting: hidden owned bytes cannot appear as a satisfied zero-byte
+budget. `mise run test` passes in the documented private Git/TMPDIR environment;
+focused race checks, Windows/macOS target lint, dependency invariants, frontmatter
+and local-link checks pass. Native three-platform CI remains the landing gate.
 
 ### GORN-V1-14 — Add exact argv execution to `sh`
 

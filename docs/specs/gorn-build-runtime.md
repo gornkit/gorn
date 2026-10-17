@@ -476,25 +476,98 @@ private copied-entry cleanup and replacement identity. The
 sharing violation to preserve ownership and release the stage lock. These tests
 run on all three supported CI hosts; cross-compilation alone is not lock proof.
 
-Cache path reports the resolved Gorn root. Cache list supports stable JSON
-(versioned schema) with identity, source, size, build time, and
-sanitized provenance, including corrupt entries. Age pruning uses build time;
-usage recency would add a write to every run. Select the management commands:
+### Cache inspection and maintenance
 
-- `cache clean <key-prefix>` requires one unambiguous key, or `--all` selects all
-  owned entries. Mutation requires `--yes`; `--dry-run` previews without it.
-- `cache prune --max-age <duration>` selects entries older than the threshold.
-  `--max-bytes <bytes>` evicts oldest eligible entries until managed bytes meet
-  the limit. With both, remove age-expired entries first, then apply the size
-  budget. Require at least one bound, and `--yes` unless previewing with
-  `--dry-run`. Report skipped active entries and an unmet budget.
-- Size means regular-file bytes under owned entries, excluding Go caches and
-  unrelated paths. Report unmanaged/quarantined bytes separately; do not imply
-  they satisfy a managed-entry budget. Corrupt entries require independent
-  ownership/build-time evidence before automatic mutation or age selection.
-- Never follow symlinks for enumeration/deletion. Keep stable lock metadata in
-  place; identify abandoned stages through ownership evidence and locks, not
-  age alone. Active entries are skipped by cleanup rather than interrupted.
+**Implemented (13):** `cache path`, `cache list`, `cache clean`, and `cache prune`
+resolve the root without invoking Go, scripts, or shell helpers. Selection is
+`GORN_CACHE`, otherwise the OS user-cache directory plus `gorn`, otherwise the
+temporary directory only if the OS cannot determine a user-cache directory.
+Relative overrides resolve from invocation cwd. Existing aliases resolve to their
+physical root. A missing root is an empty inventory. Read-only commands and
+`--dry-run` create no directories or lock files. Run/build create the same selected
+root; creation/permission errors fail explicitly instead of redirecting elsewhere.
+
+List reports full key, descriptive source, creation/build time, logical bytes,
+state/reason and sanitized recorded build profile when its manifest header is
+self-consistent. It does not discover the installed Go toolchain. Ownership and
+validity are separate: a corrupt manifest or binary can remain independently
+owned and eligible for cleanup; unsupported layouts, invalid/missing ownership,
+and unrecognized data are preserved as unmanaged. Ownership binds layout, key,
+kind and location. Stage locations bind the stage ID; quarantine names bind the
+full entry key. Metadata paths and public inventory records confer no deletion
+authority.
+
+`--json` on each command emits one schema-1 object on stdout. Path has `schema`
+and `root`; list adds `items` and `totals`. Each size is `{bytes, complete}`;
+totals separate managed entries, quarantine, stages, unmanaged data and lock
+metadata. Maintenance has `operation`, `dry_run`, per-object `actions`, `before`,
+`after`, optional `predicted`, `unmet_budget`, and optional `error`. Action states
+are `selected` (preview), `removed`, `skipped-active`, `skipped-changed`,
+`skipped-missing`, `skipped-size-unknown`, or `failed`. Operational partial
+failures still emit the maintenance report and return status 1; diagnostics and
+progress go to stderr. Invalid flag/selection syntax returns usage status 2.
+
+- `cache clean <key-prefix>` requires exactly one current owned entry matching
+  1–64 lowercase hexadecimal characters. No match or ambiguity is an operational
+  error. Mutually exclusive `--all` selects current owned entries plus owned
+  abandoned stages and quarantine. Mutation requires `--yes`; `--dry-run`
+  previews without confirmation.
+- `cache prune --max-age <duration>` selects current entries built before one
+  command-start timestamp minus the duration. `--max-bytes <integer>` then
+  considers remaining entries oldest first, with full-key ordering for ties.
+  Both bounds are nonnegative; zero is meaningful. Require at least one bound
+  and `--yes` unless previewing. Age selection runs first when both are present.
+  Stages, quarantine, unmanaged data and lock metadata cannot satisfy this budget.
+- Size counts regular-file logical lengths; hard-linked names count separately,
+  symlink targets and filesystem allocation overhead do not count. Sparse-file
+  physical allocation is not measured. Errors and overflow mark totals incomplete.
+  Unreadable namespaces or ownership records also make the affected membership
+  total incomplete, rather than falsely reporting a known empty category.
+  Incomplete managed totals prohibit size-driven deletion and leave a requested
+  byte budget unmet/status 1. Independently justified age selection can proceed.
+- Preview reports predicted selection/bytes and leaves actual `after` equal to
+  `before`. It neither probes nor reserves activity locks, so it cannot promise
+  the subsequent deletion outcome.
+- Actual cleanup tries mutation then exclusive activity locks without waiting;
+  stages use their exclusive stage lock. Busy objects are skipped, never
+  interrupted. After locking, compare the entire ownership tuple and eagerly
+  captured directory identity against the selection snapshot. Changed/missing
+  objects are skipped. Stable lock files remain in place.
+- Remove payload without following symlinks, retaining ownership until payload
+  cleanup succeeds. Check cancellation between filesystem operations; this does
+  not interrupt an arbitrary blocked OS syscall. Once final owner/directory
+  removal starts, finish that pair. If final directory removal fails on the same
+  directory identity, attempt to restore ownership and report the original error.
+  Windows sharing violations can leave owned residue for later cleanup.
+- Select once and take one final inventory. Continue past busy/failed oldest
+  candidates, counting only successful removal toward the estimate. Concurrent
+  publications, incomplete final inventory, or retained entries can leave a byte
+  budget unmet; return status 1 with the observed result. Busy/changed skips alone
+  are nonfatal for clean and age-only prune; deletion failures are not.
+
+Alternatives and rationale: a permission-driven fallback could make inspection
+and cleanup operate on a different cache than run/build, so all commands share
+one deterministic selection. Recording last-use timestamps would mutate every
+warm run; build age keeps reads cheap. Counting unmanaged/quarantine bytes toward
+an entry budget would imply removable capacity without authority, so totals stay
+separate. Deleting key-shaped paths or relying on validity manifests would grant
+unsafe authority after corruption; independent ownership plus location and
+generation checks protect replacement publications. Blocking cleanup would stall
+behind long-running scripts; nonblocking skips preserve active work. Explicit
+`--yes` suits pipelines; preview remains truly read-only instead of creating lock
+metadata. A snapshot cannot reserve future activity, so predicted and observed
+results are distinct. Repeated eviction until a live budget is satisfied could
+run indefinitely with concurrent writers; bounded selection plus a final unmet
+report gives a finite command. Automatic background eviction, old-layout
+adoption and usage-recency tracking remain outside v1.
+
+Verification: [inventory tests](../../pkg/cache/inventory_test.go),
+[maintenance tests](../../pkg/cache/maintain_test.go),
+[Windows sharing-failure tests](../../pkg/cache/maintain_windows_test.go),
+[CLI contract tests](../../pkg/cli/cachecmd_test.go), and
+[installed no-Go/active-run tests](../../cache_integration_test.go) cover these
+contracts. Native Windows CI is required evidence for sharing violations and
+ownership restoration; cross-compilation alone is insufficient.
 
 Delete only owned entries under the resolved Gorn root and leave Go caches
 untouched. Binary export uses the same validated pipeline and never executes the
