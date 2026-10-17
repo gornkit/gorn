@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func builtCLI(t *testing.T) string {
+func builtCLI(t *testing.T, flags ...string) string {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("builds installed-style CLI")
@@ -21,7 +21,8 @@ func builtCLI(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		path += ".exe"
 	}
-	cmd := exec.Command("go", "build", "-o", path, ".") //nolint:gosec // G204: test-built CLI in a controlled temporary directory.
+	args := append([]string{"build", "-o", path}, flags...)
+	cmd := exec.Command("go", append(args, ".")...) //nolint:gosec // G204: test-built CLI in a controlled temporary directory.
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build CLI: %v\n%s", err, out)
 	}

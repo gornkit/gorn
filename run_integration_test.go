@@ -6,11 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/gornkit/gorn/pkg/app"
-	"github.com/gornkit/gorn/pkg/cache"
 )
 
 func TestRunCLIStandardMainBuildAndRun(t *testing.T) {
@@ -105,17 +103,20 @@ func TestRunCLIInspectionNeverExecutesOrChangesCache(t *testing.T) {
 				if err := os.Remove(marker); err != nil {
 					t.Fatal(err)
 				}
-				original, err := app.New(path, []byte(source))
-				if err != nil {
-					t.Fatal(err)
+				manifests, err := filepath.Glob(filepath.Join(cachePath, "apps", "*", "*", "manifest.json"))
+				if err != nil || len(manifests) != 1 {
+					t.Fatalf("cached manifests: %v %v", manifests, err)
 				}
-				root := cache.Root(cachePath)
 				var corrupt string
 				switch state {
 				case "corrupt manifest":
-					corrupt = filepath.Join(root.Dir(original), "manifest.json")
+					corrupt = manifests[0]
 				case "corrupt binary":
-					corrupt = root.BinPath(original)
+					name := "app"
+					if runtime.GOOS == "windows" {
+						name += ".exe"
+					}
+					corrupt = filepath.Join(filepath.Dir(manifests[0]), "bin", name)
 				}
 				if corrupt != "" {
 					if err := os.WriteFile(corrupt, []byte("corrupt"), 0o600); err != nil { //nolint:gosec // G703: controlled fixture cache path.

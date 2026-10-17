@@ -3,11 +3,13 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gornkit/gorn/pkg/app"
+	"github.com/gornkit/gorn/pkg/buildprofile"
 )
 
 func mustSource(t *testing.T, name, data string) *app.Source {
@@ -16,7 +18,7 @@ func mustSource(t *testing.T, name, data string) *app.Source {
 	if err != nil {
 		t.Fatalf("app.New(%q): %v", name, err)
 	}
-	return s
+	return s.WithBuildIdentity(fixtureProfile().Identity)
 }
 
 // stageBuild populates dir as a finished build for src: a bin plus a manifest
@@ -34,14 +36,14 @@ func stageBuild(t *testing.T, dir string, src *app.Source) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteManifest(dir, newManifest(src, sum)); err != nil {
+	if err := WriteManifest(dir, newManifest(src, sum, fixtureProfile())); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestManifestRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	m := newManifest(mustSource(t, "/src/x.gorn", "body"), "deadbeef")
+	m := newManifest(mustSource(t, "/src/x.gorn", "body"), "deadbeef", fixtureProfile())
 	if err := WriteManifest(dir, m); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +95,7 @@ func TestCachedBinGate(t *testing.T) {
 
 	// Key mismatch → miss (guards the 12-char prefix collision: a different
 	// full key sharing the dir must not be served).
-	if err := WriteManifest(dir, newManifest(mustSource(t, "other.gorn", "other"), "x")); err != nil {
+	if err := WriteManifest(dir, newManifest(mustSource(t, "other.gorn", "other"), "x", fixtureProfile())); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := c.Lookup(src); ok {
@@ -116,7 +118,7 @@ func TestCachedBinMissWhenBinAbsent(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteManifest(dir, newManifest(src, "abc")); err != nil {
+	if err := WriteManifest(dir, newManifest(src, "abc", fixtureProfile())); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := c.Lookup(src); ok {
@@ -194,5 +196,39 @@ func TestExplicitCacheRoot(t *testing.T) {
 	t.Setenv("GORN_CACHE", filepath.Join(blocked, "cache"))
 	if _, err := Open(); err == nil || !strings.Contains(err.Error(), "GORN_CACHE") || !strings.Contains(err.Error(), blocked) {
 		t.Fatalf("explicit unusable cache must not fall back: %v", err)
+	}
+}
+
+func fixtureProfile() buildprofile.Record {
+	r := buildprofile.Record{Schema: 1, GoVersion: runtime.Version(), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
+	r.Identity = r.Fingerprint()
+	return r
+}
+
+func TestCacheRejectsChangedProfileAndTargetMetadata(t *testing.T) {
+	c := Root(t.TempDir())
+	source := mustSource(t, "profile.gorn", "body")
+	for name, mutate := range map[string]func(*Manifest){
+		"schema":           func(m *Manifest) { m.Schema-- },
+		"profile schema":   func(m *Manifest) { m.Profile.Schema++ },
+		"profile identity": func(m *Manifest) { m.Profile.Identity = "wrong" },
+		"profile contents": func(m *Manifest) { m.Profile.GoSHA256 = "changed" },
+		"target":           func(m *Manifest) { m.GOOS = "foreign" },
+		"compiler":         func(m *Manifest) { m.GoVersion = "go1.99" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			stageBuild(t, c.Dir(source), source)
+			m, err := LoadManifest(c.Dir(source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutate(&m)
+			if err := WriteManifest(c.Dir(source), m); err != nil {
+				t.Fatal(err)
+			}
+			if _, hit := c.Lookup(source); hit {
+				t.Fatal("accepted mismatched profile/target metadata")
+			}
+		})
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gornkit/gorn/pkg/app"
+	"github.com/gornkit/gorn/pkg/buildprofile"
 	"github.com/gornkit/gorn/pkg/script"
 )
 
@@ -28,8 +29,11 @@ type Entry struct {
 // already-published, equivalent entry. When noCache is true it bypasses the
 // cache entirely — no manifest, no publish — and hands the temp build dir back
 // to the caller, who must call [Entry.Remove] after running.
-func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle) (Entry, error) {
+func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle, profile *buildprofile.Profile) (Entry, error) {
 	result := Entry{}
+	if profile == nil || s.BuildIdentity() != profile.Identity() {
+		return result, fmt.Errorf("source must be bound to the selected build profile")
+	}
 
 	tmpParent := r.TmpDir()
 	if err := os.MkdirAll(tmpParent, 0o700); err != nil {
@@ -67,10 +71,7 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *sc
 		}
 	}
 
-	resolver, err := newResolver(buildDir)
-	if err != nil {
-		return result, err
-	}
+	resolver := newResolver(buildDir, profile)
 	resolution, err := resolver.resolve(g, bundle)
 	if err != nil {
 		return result, fmt.Errorf("resolve dependencies: %w", err)
@@ -78,7 +79,7 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *sc
 	if err := resolver.saveResolution(resolution); err != nil {
 		return result, err
 	}
-	if _, err := resolver.command("build", "-mod=readonly", "-buildvcs=false", "-pgo=off", "-o", filepath.Join("bin", binName), "."); err != nil {
+	if _, err := resolver.command(profile.BuildArgs(filepath.Join("bin", binName))...); err != nil {
 		if strings.Contains(err.Error(), "cannot find module providing package") || strings.Contains(err.Error(), "no required module provides package") || strings.Contains(err.Error(), "missing go.sum entry") {
 			return result, fmt.Errorf("%w\nOnly the declared graph is resolved; add or correct //gorn:require <module> <concrete-version> for the missing dependency", err)
 		}
@@ -101,7 +102,7 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *sc
 	}
 
 	// Manifest last: its presence means the entry is complete and valid.
-	if err := WriteManifest(buildDir, newManifest(s, binSHA)); err != nil {
+	if err := WriteManifest(buildDir, newManifest(s, binSHA, profile.Record())); err != nil {
 		return result, err
 	}
 

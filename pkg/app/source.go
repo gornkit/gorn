@@ -31,11 +31,12 @@ const maxSlugLen = 64
 // Source is a validated gorn script: its resolved path, raw bytes, and the
 // content-derived cache key. Construct one with New.
 type Source struct {
-	path      string
-	data      []byte
-	appKey    Key
-	sourceKey Key
-	slug      string
+	path          string
+	data          []byte
+	appKey        Key
+	sourceKey     Key
+	buildIdentity string
+	slug          string
 }
 
 // New validates path and data and returns a Source with its Key and Slug
@@ -82,10 +83,13 @@ func (s *Source) Data() []byte { return bytes.Clone(s.data) }
 // Key returns the content-derived cache key.
 func (s *Source) Key() Key { return s.appKey }
 
+func (s *Source) BuildIdentity() string { return s.buildIdentity }
+
 // WithBuildIdentity returns a source sharing immutable bytes with a build key
 // bound to the supplied dependency/profile identity. Rebinding is deterministic.
 func (s *Source) WithBuildIdentity(identity string) *Source {
 	clone := *s
+	clone.buildIdentity = identity
 	clone.appKey = clone.sourceKey
 	if identity != "" {
 		sum := sha256.Sum256([]byte(string(clone.sourceKey) + "\x00" + identity))

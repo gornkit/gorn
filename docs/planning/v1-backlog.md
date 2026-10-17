@@ -220,10 +220,10 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** effective build profile and cache identity (06),
+**Next implementation slice:** cancellation/process ownership and progress (08, 11),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
-Dependency resolution/helper delivery (07) and metadata validation (10) are
-implemented. Lifecycle and cache ownership follow build identity. Execution and source identity (04, 09), inspection safety (01), and
+Effective build-profile identity (06), dependency resolution/helper delivery (07),
+and metadata validation (10) are implemented. Cache ownership follows lifecycle. Execution and source identity (04, 09), inspection safety (01), and
 source-format work (02–03, 25) are complete. Follow the
 [delivery workflow](v1-next-steps.md) for bounded implementation and validation.
 
@@ -303,8 +303,8 @@ Propagate failed writes for generated artifacts rather than reporting success.
 
 Checksum failure becomes a miss, but publication cannot replace the occupied
 invalid directory. A successful rebuild still fails to install. Existing tests
-explicitly expect that publication error. Also, manifest loading does not reject
-a mismatched `schema` field.
+explicitly expect that publication error. Profile/target/schema validation is
+delivered under item 06; occupied-entry repair, leases, and cleanup remain here.
 Evidence: [lookup](../../pkg/cache/cache.go), [manifest](../../pkg/cache/manifest.go),
 [publication](../../pkg/cache/emit.go), and [cache tests](../../pkg/cache/cache_test.go).
 
@@ -318,13 +318,21 @@ are handled explicitly. Failed builds leave no executable partial result.
 
 **P0 · Improvement · L · Depends: 07, 09**
 
-The current key uses supplied path, bytes, runner compilation Go version, and
-runner OS/architecture. Actual builds invoke `go` from PATH with inherited build
-settings. Generator changes and the selected compiler can change without a key
-change. Manifest Go/target metadata also describes the runner, not necessarily
-the produced binary.
-Evidence: [key](../../pkg/app/key.go), [build](../../pkg/cache/emit.go),
-and [manifest construction](../../pkg/cache/manifest.go).
+**Status: implemented.** One frozen profile validates before warm/cold lookup,
+keys actual installed Go and executing CLI bytes, normalized supported flags,
+helper identity, and resolver settings, and configures resolver/build subprocesses.
+The host-only pure-Go policy rejects unsupported flags, compiler hooks,
+experiments/FIPS, and source embed/local inputs. SDK/user/process precedence is
+explicit; mutable user GOENV is disabled afterward. Manifest schema 2 records the
+actual compiler/profile with private values hashed; generation version 4 excludes
+old identity.
+
+The [build/runtime contract](../specs/gorn-build-runtime.md) records alternatives,
+rationale, and installed-input trust assumptions. Evidence:
+[profile tests](../../pkg/buildprofile/profile_test.go),
+[flag grammar](../../pkg/buildprofile/flags_test.go),
+[installed-CLI regressions](../../profile_integration_test.go), and
+[manifest gates](../../pkg/cache/cache_test.go).
 
 Acceptance: define supported inputs once and use them for execution, identity,
 and provenance: generator identity, dependency identity, actual selected Go
@@ -350,12 +358,12 @@ Go expands only the declared graph to a fixed point and builds readonly, without
 tidy/get/latest discovery or silently raising the source Go minimum. Effective
 module/checksums, original declarations, selected versions, and helper identity
 are saved. No companion lock artifact is required. The [build/runtime design](../specs/gorn-build-runtime.md)
-records alternatives, trade-offs, reproducibility limits, and temporary GOFLAGS
-rejection pending item 06. Evidence: [resolver and file-proxy regressions](../../pkg/cache/resolve_test.go),
+records alternatives, trade-offs, reproducibility limits, and the supported GOFLAGS
+allowlist delivered under item 06. Evidence: [resolver and file-proxy regressions](../../pkg/cache/resolve_test.go),
 [bundle tests](../../pkg/script/bundle_test.go), and
 [installed-CLI offline cold/warm/bypass tests](../../dependency_integration_test.go).
 Private-proxy transport failures verify URL credential/query redaction. Actual
-toolchain/generator profile identity and lifecycle remain items 06/08.
+toolchain/generator identity is delivered under 06; lifecycle remains 08.
 
 Acceptance: require concrete direct dependency versions and reject undeclared
 third-party imports with a source-oriented remedy instead of silently selecting
@@ -689,7 +697,7 @@ contracts before beta, then settle the remaining release surface:
    requirements for published helper mode, pinned-graph resolution, and saved
    module/checksum provenance. Offline/private-proxy regressions are in place;
    release-wide verification remains part of 18–22.
-2. **Build environment (06):** implement the local installed toolchain, pure-Go
+2. **Build environment (06):** delivered the local installed toolchain, pure-Go
    host profile, supported flag allowlist, and generator/profile cache identity.
 3. **Process behavior (08, 15):** implement the selected ownership/cancellation,
    foreground terminal handoff, non-login defaults, and shell status contracts.

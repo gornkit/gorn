@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gornkit/gorn/pkg/app"
+	"github.com/gornkit/gorn/pkg/buildprofile"
 	"github.com/gornkit/gorn/pkg/cache"
 	"github.com/gornkit/gorn/pkg/script"
 )
@@ -91,13 +92,27 @@ func Run(o RunOpts) error {
 	}
 
 	var bundle *script.HelperBundle
+	helperDigest := ""
 	if gen.BundleHelper {
 		bundle, err = script.LoadHelper(o.HelperSources)
 		if err != nil {
 			return err
 		}
-		source = source.WithBuildIdentity("helper:" + bundle.Digest())
+		helperDigest = bundle.Digest()
 	}
+	if len(gen.EmbedLines) > 0 {
+		return fmt.Errorf("%s: source //go:embed is unsupported in a single-file app at line %d", gen.SourcePath, gen.EmbedLines[0])
+	}
+	for _, imp := range gen.Imports {
+		if imp.Path == "C" {
+			return fmt.Errorf("%s: import C is unsupported by the pure-Go build profile at line %d", gen.SourcePath, imp.Line)
+		}
+	}
+	profile, err := buildprofile.Discover(gen.GoVersion, helperDigest)
+	if err != nil {
+		return fmt.Errorf("build profile: %w", err)
+	}
+	source = source.WithBuildIdentity(profile.Identity())
 
 	cacheRoot, err := cache.Open()
 	if err != nil {
@@ -113,7 +128,7 @@ func Run(o RunOpts) error {
 		}
 	}
 
-	entry, err := cacheRoot.Build(source, gen, o.NoCache, bundle)
+	entry, err := cacheRoot.Build(source, gen, o.NoCache, bundle, profile)
 	if err != nil {
 		return fmt.Errorf("emit: %w", err)
 	}

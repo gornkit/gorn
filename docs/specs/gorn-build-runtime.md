@@ -29,18 +29,79 @@ lazy transitives, MVS upgrades, module cycles, missing direct/graph declarations
 published/bundled helper modes and conflicts, source Go floors, populated offline
 rebuilds, and private-proxy transport diagnostic redaction. Completed builds save
 the effective module/checksums and schema-1 `dependencies.json`. Generation key
-version 3 excludes output from the previous dependency policy.
+version 4 and manifest schema 2 also bind the delivered profile below.
 
 The full local gate passes in the documented private Git/TMPDIR environment.
-Actual toolchain/profile identity, cancellation, progress, and cache ownership
-remain separate implementation items. Until item 06 supplies the supported flag
-allowlist, nonempty effective `GOFLAGS` fails before dependency resolution on
-cache misses/bypass builds. Warm-hit effective-profile validation remains item 06.
-Allowing arbitrary flags
-could redirect module resolution through a modfile or overlay; silently discarding
-them would change a requested build. Temporary rejection keeps this dependency
-guarantee executable while profile work follows. Go workspace/toolchain control,
-readonly final builds, and generated-build VCS/PGO policy are already applied.
+Cancellation, progress, and cache ownership remain separate implementation items.
+Workspace/toolchain control, readonly builds, and generated VCS/PGO policy are
+applied through the frozen profile.
+
+## Delivered build profile
+
+GORN-V1-06 discovers and validates one immutable profile before every lookup,
+including warm runs. It fingerprints the installed Go executable, reported
+version/GOROOT/architecture settings, normalized supported flags, source Go floor,
+helper bytes, dependency policy, resolver configuration, and executing CLI bytes.
+Provenance describes the actual compiler, with opaque digests for resolver
+settings and linker values. Manifest schema 2 checks the complete profile
+fingerprint and host target; generation version 4 excludes older identity.
+Occupied-entry repair/leases remain item 05.
+
+[Profile tests](../../pkg/buildprofile/profile_test.go),
+[Go flag grammar tests](../../pkg/buildprofile/flags_test.go), and
+[installed-CLI behavior](../../profile_integration_test.go) cover frozen GOENV,
+SDK/user/process precedence, normalized flag reuse, private linker values,
+same-version generator changes, selected compiler-path changes, foreign targets,
+unsupported inputs on warm runs, and real versus literal embed directives.
+[Manifest regressions](../../pkg/cache/cache_test.go) reject changed schemas,
+profile contents, identities, and targets. The full local gate passes with the
+documented Git/TMPDIR isolation and normal project VCS stamping.
+
+Configuration decisions:
+
+- A PATH launcher may identify an SDK through `go env`; subsequent commands use
+  the actual SDK directly. A real Go executable selected directly from PATH
+  retains its identity when sharing another GOROOT. Re-running a mutable launcher
+  for every phase could select different compilers.
+- Read SDK `GOROOT/go.env` defaults, then user GOENV entries, then nonempty
+  process overrides. Empty process values follow Go's fallback semantics;
+  whitespace GOFLAGS explicitly means no flags. Disable user GOENV after discovery
+  and pass captured settings. Later configuration edits cannot redirect the
+  operation. Installed SDK/CLI files are trusted, immutable inputs during discovery
+  and execution.
+  Re-query every captured setting after freezing; if an empty value would revive
+  an SDK default (for example saved `GOPROXY=`), reject the profile with the setting
+  name and an explicit-value/reset remedy. A private frozen GOENV file could
+  preserve those unusual empty overrides, but adds secret-bearing temporary
+  files and lifecycle ownership to every warm run. Bounded rejection preserves
+  the supported-value contract without silently changing configuration.
+- Support a single `-tags=<list>`, `-trimpath[=<bool>]`, and `-ldflags=<flags>`.
+  Sort/deduplicate tags; duplicate top-level options fail instead of adopting Go's
+  last-value override. Linker flags are positive `-s`, `-w`, and
+  `-X importpath.name=value`/`-X=importpath.name=value`. Sort independent assignments,
+  reject conflicting assignments, and preserve literal values using Go quoting.
+  Shell escaping is not applied. Broader linker options admit external inputs
+  that this profile cannot identify.
+- Reject explicit cgo/custom compiler settings, external-link forcing, compiler
+  debug hooks, SSA dumps, experiments, FIPS, and external cache programs. Set cgo
+  off and internal linking explicitly. Discovery queries stable fields and
+  disables GOFLAGS so unsupported build hooks cannot execute during validation.
+  Windows environment names are case insensitive.
+- GODEBUG remains inherited script runtime configuration. Go build commands clear
+  it, keeping compiler/debug behavior outside ambient runtime settings. Runtime
+  arguments and unrelated environment do not enter identity.
+- Reject source `import "C"` and real `//go:embed` comments with original paths
+  and physical lines. Directive-looking strings/block comments remain ordinary
+  Go. Inspection prints source/module plans without requiring Go or a supported
+  compiler profile. Dependency modules may embed assets.
+
+Alternatives: inheriting mutable configuration risks a different build after
+lookup; ignoring requested flags silently changes intent; accepting every flag
+requires tracking arbitrary files, compilers, and linkers. The bounded profile
+supports useful pure-Go builds while rejecting unidentifiable requests. Opaque
+resolver settings can invalidate reuse after authentication/configuration changes;
+this conservative cost avoids assuming differently configured module sources are
+interchangeable and keeps credentials out of provenance.
 
 ## Dependencies and helper delivery
 

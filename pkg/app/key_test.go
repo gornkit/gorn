@@ -7,7 +7,7 @@ import (
 
 func TestKeyInvalidatesLegacyGeneration(t *testing.T) {
 	path, source := "/task.gorn", []byte("package main;func main(){}")
-	for _, generation := range []byte{1, 2} {
+	for _, generation := range []byte{1, 2, 3} {
 		legacy := Key(hashStruct(keyInputs{
 			cacheVersion: generation, goversion: runtime.Version(), sourcePath: path,
 			goos: runtime.GOOS, goarch: runtime.GOARCH, source: source,

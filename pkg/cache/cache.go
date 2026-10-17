@@ -79,7 +79,8 @@ func (c Root) Lookup(s *app.Source) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	if m.Key != string(s.Key()) {
+	if m.Schema != manifestSchema || m.Key != string(s.Key()) || m.Profile.Schema != 1 || m.Profile.Identity == "" || m.Profile.Identity != s.BuildIdentity() || m.Profile.Fingerprint() != m.Profile.Identity ||
+		m.GOOS != runtime.GOOS || m.GOARCH != runtime.GOARCH || m.Profile.GOOS != m.GOOS || m.Profile.GOARCH != m.GOARCH || m.Profile.GoVersion != m.GoVersion {
 		return "", false
 	}
 	bin := c.BinPath(s)

@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-const cacheVersion byte = 3
+const cacheVersion byte = 4
 
 // Key is the hex SHA-256 cache key identifying a unique build of a script.
 type Key string
@@ -21,9 +21,9 @@ type keyInputs struct {
 	source       []byte
 }
 
-// NewKey derives the cache key for a script from its absolute path and
-// bytes, plus the Go version and target GOOS/GOARCH, so any change that affects
-// the built binary forces a cache miss.
+// NewKey derives a base source key from absolute path and bytes, namespaced by
+// runner compilation/platform information. Bind the effective installed build
+// profile with Source.WithBuildIdentity before build or cache lookup.
 func NewKey(absPath string, source []byte) Key {
 	inputs := keyInputs{
 		cacheVersion: cacheVersion,

@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gornkit/gorn/pkg/buildprofile"
 	"github.com/gornkit/gorn/pkg/script"
 	"golang.org/x/mod/modfile"
 )
@@ -45,44 +46,8 @@ type resolver struct {
 	env         []string
 }
 
-func newResolver(dir string) (*resolver, error) {
-	goPath, err := exec.LookPath("go")
-	if err != nil {
-		return nil, fmt.Errorf("discover Go: %w", err)
-	}
-	goPath, err = filepath.Abs(goPath)
-	if err != nil {
-		return nil, err
-	}
-	r := &resolver{dir: dir, goPath: goPath, env: os.Environ()}
-	// Generated modules must not join the user's workspace or download another
-	// toolchain. The complete build-profile allowlist is maintained separately.
-	r.env = replaceEnv(r.env, "GOWORK", "off")
-	r.env = replaceEnv(r.env, "GOTOOLCHAIN", "local")
-	r.env = replaceEnv(r.env, "GO111MODULE", "on")
-	flags, err := r.command("env", "GOFLAGS")
-	if err != nil {
-		return nil, err
-	}
-	if len(bytes.TrimSpace(flags)) != 0 {
-		return nil, errors.New("dependency policy: nonempty GOFLAGS is not supported by this build profile")
-	}
-	// Go treats an empty environment value as absent and then reads GOENV.
-	// Whitespace is an explicit empty flag list that cannot reactivate stored
-	// flags after this validation (for example a persisted -modfile/-toolexec).
-	r.env = replaceEnv(r.env, "GOFLAGS", " ")
-	return r, nil
-}
-
-func replaceEnv(env []string, name, value string) []string {
-	prefix := name + "="
-	result := make([]string, 0, len(env)+1)
-	for _, entry := range env {
-		if !strings.EqualFold(strings.SplitN(entry, "=", 2)[0], name) {
-			result = append(result, entry)
-		}
-	}
-	return append(result, prefix+value)
+func newResolver(dir string, profile *buildprofile.Profile) *resolver {
+	return &resolver{dir: dir, goPath: profile.GoPath(), env: profile.Environment()}
 }
 
 func (r *resolver) command(args ...string) ([]byte, error) {
@@ -91,7 +56,12 @@ func (r *resolver) command(args ...string) ([]byte, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("go %s: %w\n%s", strings.Join(args, " "), err, sanitizeDiagnostic(stderr.String()))
+		// Build flags can contain private -X values. Only the phase is public.
+		phase := args[0]
+		if phase == "mod" && len(args) > 1 {
+			phase += " " + args[1]
+		}
+		return nil, fmt.Errorf("go %s: %w\n%s", phase, err, sanitizeDiagnostic(stderr.String()))
 	}
 	return stdout.Bytes(), nil
 }
