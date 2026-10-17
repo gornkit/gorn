@@ -6,13 +6,20 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"slices"
 	"strconv"
 	"text/template"
+
+	"golang.org/x/mod/module"
 )
 
 const (
 	moduleDefault    = "gorn.local/app"
 	defaultGoVersion = "1.26"
+	HelperModule     = "github.com/gornkit/gorn/sh"
+	RunnerModule     = "github.com/gornkit/gorn"
+	HelperDir        = "gorn-runtime"
+	HelperGoVersion  = "1.26"
 )
 
 //go:embed mod.gotmpl
@@ -24,7 +31,7 @@ var preamblePackages = []struct{ Path, Symbol string }{
 	{"path/filepath", "filepath.Separator"},
 	{"fmt", "fmt.Println"},
 	{"os", "os.Stdout"},
-	{"github.com/gornkit/gorn/sh", "sh.PreambleSentinel"},
+	{HelperModule, "sh.PreambleSentinel"},
 	{"strconv", "strconv.IntSize"},
 	{"strings", "strings.Contains"},
 	{"time", "time.Nanosecond"},
@@ -35,6 +42,18 @@ var preamblePackages = []struct{ Path, Symbol string }{
 type Generated struct {
 	MainGenerated []byte
 	ModGenerated  []byte
+	SourcePath    string
+	GoVersion     string
+	Module        string
+	Declared      []Require
+	Imports       []Import
+	BundleHelper  bool
+}
+
+// Import records a package request at its original physical source line.
+type Import struct {
+	Path string `json:"path"`
+	Line int    `json:"line"`
 }
 
 // GenerateError wraps a generation error. Raw is populated only when internal
@@ -53,10 +72,41 @@ func Generate(f *File) (*Generated, error) {
 			return nil, err
 		}
 	}
+	imports := make([]Import, 0, len(f.syntax.Imports)+len(preamblePackages))
+	needsHelper := f.UsePreamble
+	for _, imp := range f.syntax.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			return nil, lineError(f.position(imp.Pos()).Line, fmt.Errorf("%w: %w", ErrInvalidImport, err))
+		}
+		if err := module.CheckImportPath(path); err != nil {
+			return nil, lineError(f.position(imp.Pos()).Line, fmt.Errorf("%w: %w", ErrInvalidImport, err))
+		}
+		imports = append(imports, Import{Path: path, Line: f.position(imp.Pos()).Line})
+		needsHelper = needsHelper || path == HelperModule
+	}
+	if f.UsePreamble {
+		for _, pkg := range preamblePackages {
+			imports = append(imports, Import{Path: pkg.Path, Line: f.preambleLine})
+		}
+	}
+	bundled := needsHelper
+	for _, req := range f.Requires {
+		if req.Path == HelperModule {
+			return nil, lineError(f.requireLines[req.Path], ErrReservedHelperModule)
+		}
+		if req.Path == RunnerModule {
+			bundled = false
+		}
+	}
 	modData := struct {
 		Module, GoVersion string
 		Requires          []Require
-	}{Module: f.Module, GoVersion: f.GoVersion, Requires: f.Requires}
+		BundleHelper      bool
+	}{Module: f.Module, GoVersion: f.GoVersion, Requires: slices.Clone(f.Requires), BundleHelper: bundled}
+	if bundled {
+		modData.Requires = append(modData.Requires, Require{Path: HelperModule, Version: "v0.0.0"})
+	}
 	if modData.Module == "" {
 		modData.Module = moduleDefault
 	}
@@ -94,7 +144,7 @@ func Generate(f *File) (*Generated, error) {
 	if _, err := parser.ParseFile(token.NewFileSet(), "main.gorn.go", generated, parser.SkipObjectResolution); err != nil {
 		return nil, &GenerateError{Err: err, Raw: generated}
 	}
-	return &Generated{MainGenerated: generated, ModGenerated: mod.Bytes()}, nil
+	return &Generated{MainGenerated: generated, ModGenerated: mod.Bytes(), SourcePath: f.SourcePath, GoVersion: modData.GoVersion, Module: modData.Module, Declared: slices.Clone(f.Requires), Imports: imports, BundleHelper: bundled}, nil
 }
 
 func writeSourceAnchor(out *bytes.Buffer, path string, line, column int) {

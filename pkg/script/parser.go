@@ -26,6 +26,8 @@ const (
 	ErrInvalidMain            ParserError = "main must have a body and no parameters, results, or type parameters"
 	ErrDirectiveAfterPackage  ParserError = "gorn directive after package clause"
 	ErrInvalidDirective       ParserError = "invalid gorn directive"
+	ErrInvalidImport          ParserError = "invalid import path"
+	ErrReservedHelperModule   ParserError = "helper child module is reserved; require github.com/gornkit/gorn at a concrete version instead"
 	ErrInvalidGoVersion       ParserError = "invalid //gorn:go version"
 	ErrInvalidModule          ParserError = "invalid //gorn:module path"
 	ErrDuplicateRequire       ParserError = "duplicate //gorn:require module"
@@ -62,6 +64,7 @@ type File struct {
 	fset         *token.FileSet
 	syntax       *ast.File
 	requireLines map[string]int
+	preambleLine int
 }
 
 type Require struct {
@@ -241,6 +244,7 @@ func (f *File) applyDirective(directive string, line int) error {
 			return ErrDuplicatePreamble
 		}
 		f.UsePreamble = true
+		f.preambleLine = line
 	default:
 		return ErrInvalidDirective
 	}

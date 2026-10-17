@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 // RunOpts configures a single Run invocation.
 type RunOpts struct {
+	HelperSources  fs.FS
 	Stdout         io.Writer
 	Stderr         io.Writer
 	Verbose        bool
@@ -88,6 +90,15 @@ func Run(o RunOpts) error {
 		return printArtifacts(o, gen)
 	}
 
+	var bundle *script.HelperBundle
+	if gen.BundleHelper {
+		bundle, err = script.LoadHelper(o.HelperSources)
+		if err != nil {
+			return err
+		}
+		source = source.WithBuildIdentity("helper:" + bundle.Digest())
+	}
+
 	cacheRoot, err := cache.Open()
 	if err != nil {
 		return err
@@ -102,7 +113,7 @@ func Run(o RunOpts) error {
 		}
 	}
 
-	entry, err := cacheRoot.Build(source, gen, o.NoCache)
+	entry, err := cacheRoot.Build(source, gen, o.NoCache, bundle)
 	if err != nil {
 		return fmt.Errorf("emit: %w", err)
 	}

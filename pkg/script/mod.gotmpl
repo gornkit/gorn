@@ -9,3 +9,7 @@ require (
 {{- end }}
 )
 {{- end }}
+{{- if .BundleHelper }}
+
+replace github.com/gornkit/gorn/sh => ./gorn-runtime
+{{- end }}

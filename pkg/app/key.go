@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-const cacheVersion byte = 2
+const cacheVersion byte = 3
 
 // Key is the hex SHA-256 cache key identifying a unique build of a script.
 type Key string

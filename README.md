@@ -124,6 +124,21 @@ a human or pipeline will read. See
 [`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) for the
 full format, the preamble package list, and its rules.
 
+For third-party imports, declare a concrete module minimum with
+`//gorn:require <module-path> <version>`. Gorn resolves only the declared graph;
+it never discovers an undeclared latest dependency. Direct imports need their
+own covering declaration even when another dependency brings the module in.
+
+The preamble and explicit `sh` imports use production helper source bundled with
+the CLI, so stdlib/helper scripts build offline. To select a published helper,
+declare `//gorn:require github.com/gornkit/gorn <concrete-version>`. Mixing a
+transitive parent module with the bundled helper is rejected with that remedy.
+Builds retain the effective module, checksums, and selected graph in the cache.
+Other offline cold builds require populated Go caches; warm Gorn hits avoid
+downloads. Dependencies requiring a higher Go minimum need an explicit
+`//gorn:go` update. Cold/bypass builds currently reject nonempty `GOFLAGS` while
+the build-profile allowlist and warm-hit profile validation are completed.
+
 ## License
 
 [Apache 2.0](LICENSE).

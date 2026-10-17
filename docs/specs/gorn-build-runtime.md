@@ -18,6 +18,30 @@ Implementation recommendation: GPT-6.1 Sol, high reasoning, with GPT-6 Astra at
 high reasoning for cross-cutting design review and independent P0 review of
 identity, dependency resolution, and process ownership.
 
+## Delivered dependency policy
+
+GORN-V1-07 implements the dependency/helper policy below. Evidence includes
+[bundle identity/materialization tests](../../pkg/script/bundle_test.go),
+[maintained-source embedding checks](../../helper_embed_test.go),
+[real file-proxy graph tests](../../pkg/cache/resolve_test.go), and
+[installed-CLI offline runs](../../dependency_integration_test.go). These cover
+lazy transitives, MVS upgrades, module cycles, missing direct/graph declarations,
+published/bundled helper modes and conflicts, source Go floors, populated offline
+rebuilds, and private-proxy transport diagnostic redaction. Completed builds save
+the effective module/checksums and schema-1 `dependencies.json`. Generation key
+version 3 excludes output from the previous dependency policy.
+
+The full local gate passes in the documented private Git/TMPDIR environment.
+Actual toolchain/profile identity, cancellation, progress, and cache ownership
+remain separate implementation items. Until item 06 supplies the supported flag
+allowlist, nonempty effective `GOFLAGS` fails before dependency resolution on
+cache misses/bypass builds. Warm-hit effective-profile validation remains item 06.
+Allowing arbitrary flags
+could redirect module resolution through a modfile or overlay; silently discarding
+them would change a requested build. Temporary rejection keeps this dependency
+guarantee executable while profile work follows. Go workspace/toolchain control,
+readonly final builds, and generated-build VCS/PGO policy are already applied.
+
 ## Dependencies and helper delivery
 
 Every direct nonstandard import needs a concrete `//gorn:require` module

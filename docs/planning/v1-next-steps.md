@@ -21,13 +21,13 @@ cache access, with write-error propagation. GORN-V1-04/09 define and implement
 [execution and source identity](v1-execution-plan.md). **Build, dependency, and
 lifecycle contracts (06–08) are selected in the
 [build/runtime design](../specs/gorn-build-runtime.md). GORN-V1-10 implements
-metadata syntax/cardinality validation; helper bundling and pinned resolution
-(07) are next.**
+metadata syntax/cardinality validation. GORN-V1-07 delivers bundled/published
+helper modes, pinned-graph resolution, and saved module/checksum provenance.
+Effective build-profile identity (06) is next.**
 
 ## Remaining sequence
 
-1. **Implement the selected build/runtime contracts.** Start with dependency
-   helper bundling and pinned dependency resolution (07), then build identity (06), lifecycle
+1. **Implement the selected build/runtime contracts.** Complete build identity (06), then lifecycle
    and progress (08, 11), and cache repair/leases (05). Keep profile, resolution,
    ownership, and provenance consistent before expanding build/cache commands.
 2. **Deliver core workflows (12–15).** Implement binary export, cache management,
