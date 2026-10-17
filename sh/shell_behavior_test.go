@@ -105,7 +105,9 @@ func TestNamedShellEnvironmentCwdAndIO(t *testing.T) {
 			t.Setenv("GORN_SHELL_ENV", "inherited")
 			script := `printf '%s\n' "$GORN_SHELL_ENV"; pwd; printf 'diagnostic' >&2`
 			if name == "cmd" {
-				script = `echo %GORN_SHELL_ENV%& cd & <nul set /p "=diagnostic" 1>&2`
+				// set /p prints without a newline but returns failure on EOF;
+				// this IO fixture deliberately finishes with explicit success.
+				script = `echo %GORN_SHELL_ENV%& cd & <nul set /p "=diagnostic" 1>&2&exit /B 0`
 			}
 			if name == "pwsh" {
 				script = `Write-Output $env:GORN_SHELL_ENV; (Get-Location).Path; [Console]::Error.Write('diagnostic')`
