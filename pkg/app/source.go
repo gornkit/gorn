@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -35,7 +37,9 @@ type Source struct {
 
 // New validates path and data and returns a Source with its Key and Slug
 // computed. It rejects an empty path (ErrUnresolvedPath) or empty data
-// (ErrEmptyScript), and maps the "-" stdin convention to /dev/stdin.
+// (ErrEmptyScript). Paths are absolute and cleaned without resolving symlinks.
+// The "-" convention uses a synthetic stdin.gorn path in the invocation cwd
+// and a distinct cache identity from a file at that path.
 func New(path string, data []byte) (*Source, error) {
 	if path == "" {
 		return nil, ErrUnresolvedPath
@@ -43,14 +47,23 @@ func New(path string, data []byte) (*Source, error) {
 	if len(data) == 0 {
 		return nil, ErrEmptyScript
 	}
-	if path == "-" {
-		path = "/dev/stdin"
+	stdin := path == "-"
+	if stdin {
+		path = "stdin.gorn"
+	}
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve source path: %w", err)
+	}
+	identity := path
+	if stdin {
+		identity = "stdin\x00" + path
 	}
 
 	return &Source{
 		path:   path,
-		data:   data,
-		appKey: NewKey(path, data),
+		data:   bytes.Clone(data),
+		appKey: NewKey(identity, data),
 		slug:   makeSlug(path),
 	}, nil
 }
@@ -58,8 +71,8 @@ func New(path string, data []byte) (*Source, error) {
 // Path returns the resolved script path.
 func (s *Source) Path() string { return s.path }
 
-// Data returns the raw script bytes.
-func (s *Source) Data() []byte { return s.data }
+// Data returns an independent copy of the raw script bytes.
+func (s *Source) Data() []byte { return bytes.Clone(s.data) }
 
 // Key returns the content-derived cache key.
 func (s *Source) Key() Key { return s.appKey }

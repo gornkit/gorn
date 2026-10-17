@@ -129,7 +129,7 @@ func execCmd(o RunOpts, appBin string) error {
 	cmd.Stdin = os.Stdin
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("run: %w", err)
+		return scriptError(err)
 	}
 
 	return nil

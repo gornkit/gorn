@@ -71,6 +71,12 @@ gorn --version
 Inspection parses and generates source without running the script, accessing the
 build cache, or invoking Go. Output-write failures are reported as errors.
 
+Use `--` before script arguments that look like gorn flags. Child exit codes and
+stdout/stderr are preserved; usage errors go to stderr with status 2. Scripts run
+from the invocation directory. Source supplied through `-` consumes stdin before
+the program starts. Relative `GORN_CACHE` paths resolve from the invocation
+directory; an unusable explicit cache path reports an error.
+
 The build cache lives under `$GORN_CACHE` (falling back to the user cache dir,
 then a temp dir).
 

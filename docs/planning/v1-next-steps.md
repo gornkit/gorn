@@ -17,22 +17,20 @@ GORN-V1-25 establishes the standard Go source format and completes the related
 source-preservation and directive fixes in 02–03. The
 [implementation record](v1-standard-main-plan.md) captures the contract and
 verification evidence. GORN-V1-01 makes inspection independent of execution and
-cache access, with write-error propagation. **Execution correctness (04, 09) is
-the next implementation slice.**
+cache access, with write-error propagation. GORN-V1-04/09 define and implement
+[execution and source identity](v1-execution-plan.md). **Build, dependency, and
+lifecycle contracts (06–08) are next.**
 
 ## Remaining sequence
 
-1. **Complete execution correctness (04, 09).** Preserve child exit status and
-   define arguments, IO, cwd, and source-path behavior. Extend real CLI coverage
-   as each contract is implemented.
-2. **Settle build, dependency, and lifecycle contracts (06–08).** Define effective
+1. **Settle build, dependency, and lifecycle contracts (06–08).** Define effective
    build inputs, dependency resolution, helper versioning, cancellation, and
    process ownership before expanding build/cache workflows. Use those decisions
    to complete cache repair (05), validation (10), and progress reporting (11).
-3. **Deliver core workflows (12–15).** Implement binary export, cache management,
+2. **Deliver core workflows (12–15).** Implement binary export, cache management,
    exact-argument execution, and supported shell behavior. Keep the `sh` package
    stdlib-only and independent of the CLI dependency graph.
-4. **Complete release gates (18–22).** Extend installed-CLI and cross-platform
+3. **Complete release gates (18–22).** Extend installed-CLI and cross-platform
    tests, finish onboarding, review public APIs, measure startup, and verify
    installation and published dependency resolution. Optional items 16–17 and
    23–24 do not hold v1 open.

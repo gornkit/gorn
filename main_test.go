@@ -238,12 +238,12 @@ func TestRunCLIErrorsDoNotRun(t *testing.T) {
 }
 
 func TestRunCLIFallbackErrorPrintsUsage(t *testing.T) {
-	got := runCLIForTest(t, "blah")
+	got := runCLIForTest(t, "--unknown")
 	if got.err == nil {
 		t.Fatal("error = nil")
 	}
-	if !strings.Contains(got.stdout, "Usage:") {
-		t.Fatalf("fallback error did not print usage:\n%s", got.stdout)
+	if !strings.Contains(got.stderr, "Usage:") || got.stdout != "" {
+		t.Fatalf("fallback usage stdout=%q stderr=%q", got.stdout, got.stderr)
 	}
 }
 

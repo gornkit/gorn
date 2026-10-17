@@ -174,3 +174,25 @@ func TestPublish(t *testing.T) {
 		}
 	})
 }
+
+func TestExplicitCacheRoot(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("GORN_CACHE", "relative-cache")
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := Open()
+	if err != nil || root.Path() != filepath.Join(cwd, "relative-cache") {
+		t.Fatalf("relative cache: root=%q err=%v", root, err)
+	}
+	blocked := filepath.Join(dir, "blocked")
+	if err := os.WriteFile(blocked, []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GORN_CACHE", filepath.Join(blocked, "cache"))
+	if _, err := Open(); err == nil || !strings.Contains(err.Error(), "GORN_CACHE") || !strings.Contains(err.Error(), blocked) {
+		t.Fatalf("explicit unusable cache must not fall back: %v", err)
+	}
+}

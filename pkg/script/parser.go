@@ -8,7 +8,6 @@ import (
 	"go/scanner"
 	"go/token"
 	"io"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -64,15 +63,7 @@ type Require struct{ Path, Version string }
 // comments from the header before package main. Go syntax errors retain their
 // original source positions and underlying scanner.ErrorList.
 func Parse(s *app.Source) (*File, error) {
-	name := s.Path()
-	if name != "/dev/stdin" {
-		var err error
-		name, err = filepath.Abs(name)
-		if err != nil {
-			return nil, err
-		}
-	}
-	f := &File{SourcePath: s.Path(), sourceName: name, Content: bytes.Clone(s.Data()), fset: token.NewFileSet()}
+	f := &File{SourcePath: s.Path(), sourceName: s.Path(), Content: s.Data(), fset: token.NewFileSet()}
 	if bytes.HasPrefix(f.Content, []byte("#!")) {
 		for i, b := range f.Content {
 			if b == '\n' {
@@ -87,7 +78,7 @@ func Parse(s *app.Source) (*File, error) {
 		copy(f.Content, "   ")
 	}
 	var err error
-	f.syntax, err = parser.ParseFile(f.fset, name, f.Content, parser.ParseComments|parser.SkipObjectResolution)
+	f.syntax, err = parser.ParseFile(f.fset, f.sourceName, f.Content, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		return nil, err
 	}
