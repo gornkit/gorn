@@ -27,8 +27,8 @@ func TestHostKeepsShellPath(t *testing.T) {
 	t.Setenv("SHELL", "/usr/local/bin/bash")
 
 	got := Host()
-	if got.base != "/usr/local/bin/bash" || len(got.args) != 1 || got.args[0] != "-lc" {
-		t.Fatalf("Host() = %#v, want bash path with -lc", got)
+	if got.base != "/usr/local/bin/bash" || len(got.args) != 1 || got.args[0] != "-c" {
+		t.Fatalf("Host() = %#v, want bash path with -c", got)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const (
@@ -18,20 +19,22 @@ const (
 // otherwise cmd.exe on Windows and sh on Unix.
 func Host() ShellSpec { return getHostSpec() }
 
-// Bash returns a shell spec for bash -lc.
-func Bash() ShellSpec { return NewShell(baseBash, "-lc") }
+// Bash returns a non-login shell spec for bash -c.
+func Bash() ShellSpec { return NewShell(baseBash, "-c") }
 
-// Zsh returns a shell spec for zsh -lc.
-func Zsh() ShellSpec { return NewShell(baseZsh, "-lc") }
+// Zsh returns a non-login shell spec for zsh -fc, skipping personal startup files.
+func Zsh() ShellSpec { return NewShell(baseZsh, "-fc") }
 
 // Sh returns a shell spec for sh -c.
 func Sh() ShellSpec { return NewShell(basePosixSh, "-c") }
 
-// CmdExe returns a shell spec for cmd.exe /C.
-func CmdExe() ShellSpec { return NewShell(baseCmdExe, "/C") }
+// CmdExe returns cmd.exe /D /S /C, disabling registry AutoRun commands.
+func CmdExe() ShellSpec { return NewShell(baseCmdExe, "/D", "/S", "/C") }
 
-// Pwsh returns a shell spec for pwsh -Command.
-func Pwsh() ShellSpec { return NewShell(basePwsh, "-Command") }
+// Pwsh returns PowerShell without profiles or interactive prompts.
+func Pwsh() ShellSpec {
+	return NewShell(basePwsh, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command")
+}
 
 // NewShell returns a shell spec that invokes base with args before the script.
 func NewShell(base string, args ...string) ShellSpec {
@@ -54,9 +57,11 @@ func (s ShellSpec) Setup(lines ...string) ShellSpec {
 	return s
 }
 
-// Strict returns a copy with fail-fast setup for known shells.
+// Strict adds set -euo pipefail for Bash/Zsh, set -eu for Sh, or
+// ErrorActionPreference=Stop for PowerShell. Cmd and unknown shells are unchanged.
+// PowerShell native exit codes still require explicit handling by the script.
 func (s ShellSpec) Strict() ShellSpec {
-	switch filepath.Base(s.base) {
+	switch shellBase(s.base) {
 	case baseBash, baseZsh:
 		return s.Setup("set -euo pipefail")
 	case basePosixSh:
@@ -85,13 +90,34 @@ func getHostSpec() ShellSpec {
 	default:
 		envShell := os.Getenv("SHELL")
 		if envShell != "" {
-			switch filepath.Base(envShell) {
-			case baseBash, baseZsh:
-				return NewShell(envShell, "-lc")
+			switch shellBase(envShell) {
+			case baseBash:
+				return NewShell(envShell, "-c")
+			case baseZsh:
+				return NewShell(envShell, "-fc")
 			case basePosixSh:
 				return NewShell(envShell, "-c")
 			}
 		}
 		return Sh()
 	}
+}
+
+// Windows executable names are case-insensitive; Unix names retain their case.
+func shellBase(path string) string {
+	base := filepath.Base(path)
+	if runtime.GOOS == "windows" {
+		base = strings.TrimSuffix(strings.ToLower(base), ".exe")
+		if base == "cmd" {
+			return baseCmdExe
+		}
+	}
+	return base
+}
+
+func (s ShellSpec) separator() string {
+	if runtime.GOOS == "windows" && shellBase(s.base) == baseCmdExe {
+		return "&"
+	}
+	return "\n"
 }

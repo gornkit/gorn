@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Command is a configured shell snippet that can be executed or started.
+// Command is a configured executable or shell snippet that can be executed or started.
 type Command struct {
 	ctx        context.Context
 	contextSet bool
@@ -96,7 +96,7 @@ func (c Command) Start() (*Process, error) {
 	script := c.script
 	if len(c.shell.setupLines) > 0 {
 		lines := append([]string(nil), c.shell.setupLines...)
-		script = strings.Join(append(lines, script), "\n")
+		script = strings.Join(append(lines, script), c.shell.separator())
 	}
 
 	name, args := c.name, append([]string(nil), c.args...)
@@ -105,6 +105,9 @@ func (c Command) Start() (*Process, error) {
 		args = append(append([]string(nil), c.shell.args...), script)
 	}
 	cmd := exec.Command(name, args...) //nolint:gosec // G204: helper intentionally runs caller-selected programs or shell snippets.
+	if c.name == "" {
+		configureShellCommand(cmd, c.shell, script)
+	}
 	cmd.Dir = c.startDir
 	cmd.Env = os.Environ()
 	for k, v := range c.env {

@@ -220,11 +220,11 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** shell/API stabilization (14–15),
+**Next implementation slice:** installed workflows and onboarding (18–19),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
 Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
 cache ownership/repair (05), profile (06), dependency/helper delivery (07),
-lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13) are implemented.
+lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13), and shell/exact-argv stabilization (14–15) are implemented.
 Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
 validation.
 
@@ -546,11 +546,12 @@ Add a bounded `sh.Cmd(name string, args ...string)` entry point using the existi
 command configuration and result model. Ordinary commands should not require
 constructing shell strings. Keep shell execution available for shell syntax.
 
-**Status: core API delivered with 08.** Exact arguments use the same immutable
+**Status: implemented; core API delivered with 08, final verification with 15.** Exact arguments use the same immutable
 configuration, IO/env/dir, cancellation, status, and startup path as shell snippets.
 [Tests](../../sh/command_test.go) cover spaces, Unicode, quotes, empty arguments,
 metacharacters, executable paths, independent copies, IO/env/dir, and failures.
-Final supported-shell/API verification remains coordinated with 15 and 20.
+Supported-shell verification is delivered with 15; compatibility policy remains
+in 20.
 
 Acceptance: arguments containing spaces, quotes, wildcard/metacharacters, and
 empty values arrive literally without shell interpretation. IO/env/dir,
@@ -562,19 +563,25 @@ do not add implicit globbing, argument flattening, or a pipeline abstraction.
 
 **P1 · Improvement · M · Depends: 08; review API before 14**
 
-Document host-shell selection, login/profile startup, setup ordering, environment
-inheritance, `Strict`, IO ownership, `Wait`, and `Kill`. Most behavioral tests use
-Bash and skip Windows. `Strict` identifies exact executable basenames, missing
-paths such as `pwsh.exe`.
-Evidence: [shell selection](../../sh/shellspec.go), [package docs](../../sh/doc.go),
-and [shell tests](../../sh/shellspec_test.go).
+**Status: implemented.** The [authoritative helper contract](../specs/gorn-sh.md)
+selects non-login automation defaults, explicit NewShell profile opt-in,
+shell-specific Strict, setup ordering and limits, environment/PATH/cwd/IO,
+status-only results and Wait/Kill/exit behavior. Windows recognition handles
+absolute paths, extensions and casing. Explicit Cmd snippets use native raw
+script transport; exact Cmd arguments retain Go's normal argv path. Embedded
+helper identity invalidates generated builds after this source change.
 
-Acceptance: decide login versus non-login defaults before v1. Verify the named
-supported shells on appropriate CI hosts, including CmdExe and PowerShell;
-unsupported optional shells skip explicitly. Cover absolute executable paths,
-Windows extensions/casing, missing shells, env override, setup immutability,
-and exit behavior. State what PowerShell strictness means for native commands.
-Keep status-only results and standard Go IO as the output extension points.
+[Named-shell tests](../../sh/shell_behavior_test.go) require Bash/Sh on Linux/macOS,
+Zsh on macOS, and Cmd/PowerShell 7 on Windows; optional shells skip explicitly.
+[Windows tests](../../sh/shell_behavior_windows_test.go) cover quoting with spaced
+executable paths, delayed expansion, PowerShell native exit behavior and process
+attribute preservation. Existing exact-argument and process-lifecycle coverage
+remains intact. The specification records the alternatives and trade-offs for
+login startup, inherited hooks, strictness and Windows quoting. `mise run test`
+passes with the documented private Git/TMPDIR fixture, including embedded-helper
+execution and lifecycle regression tests. Race checks, Windows/macOS target lint,
+dependency invariants and documentation checks pass. Independent P0 transport
+review found no remaining issue; native three-platform CI is the landing gate.
 
 ### GORN-V1-16 — Add a non-executing check workflow
 

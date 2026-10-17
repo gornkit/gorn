@@ -28,8 +28,9 @@ toolchain/profile. GORN-V1-08 delivers lifecycle ownership and the core exact-ar
 helper API from 14. GORN-V1-11 delivers immediate phases, bounded diagnostic
 streaming, heartbeats, and quiet behavior. GORN-V1-05 delivers cache repair, independent ownership and cancellable leases.
 GORN-V1-12 delivers standalone binary export. GORN-V1-13 delivers read-only
-inventory and bounded, ownership-aware cache maintenance. Shell/API
-stabilization (14–15) is next.**
+inventory and bounded, ownership-aware cache maintenance. GORN-V1-14/15
+stabilize exact arguments and supported shells. Installed workflows and
+onboarding (18–19) are next.**
 
 ## Remaining sequence
 

@@ -17,7 +17,7 @@ import (
 	"github.com/gornkit/gorn/pkg/cli"
 )
 
-//go:embed sh/command.go sh/doc.go sh/pkg.go sh/process.go sh/process_core.go sh/process_posix.go sh/process_linux.go sh/process_darwin.go sh/process_windows.go sh/process_unsupported.go sh/process_marker.go sh/result.go sh/shellspec.go LICENSE
+//go:embed sh/command.go sh/doc.go sh/pkg.go sh/process.go sh/process_core.go sh/process_posix.go sh/process_linux.go sh/process_darwin.go sh/process_windows.go sh/process_unsupported.go sh/process_marker.go sh/result.go sh/shellspec.go sh/shell_command_other.go sh/shell_command_windows.go LICENSE
 var helperSources embed.FS
 
 var Version = "dev"
