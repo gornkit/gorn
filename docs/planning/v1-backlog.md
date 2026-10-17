@@ -1,30 +1,27 @@
 ---
 title: Gorn v1 Product Assessment and Backlog
-status: draft
+status: authoritative
 type: plan
 updated: 2026-10-17
-summary: Evidence-based assessment, proposed v1 scope, prioritized backlog, and release gates for reliable single-file Go automation.
+summary: Delivered v1 scope, historical assessment, implementation evidence, explicit optional deferrals and verified release gates.
 ---
 
 # Gorn v1 product assessment and backlog
 
 ## Recommendation
 
-Gorn has a working foundation for single-file Go automation. It is pre-alpha,
-not yet ready for a stable v1 promise. The next investment should make running
-an ordinary Go script predictable: preserve its meaning, resolve its dependencies
-consistently, reuse the correct binary, and behave correctly in terminals and CI.
+Gorn v1.0.0 delivers reliable single-file Go automation around **run, build,
+cache management and a small stable `sh` API**, including exact arguments.
+All required P0/P1 items are implemented and verified; the candidate and stable
+release pipelines pass, and [v1.0.0 is Latest](https://github.com/gornkit/gorn/releases/tag/v1.0.0).
+Go remains the language and dependency system. Optional authoring conveniences
+(16–17, 23–24), fragments, a pipeline DSL, filesystem utilities and a full language
+server remain outside this release, with rationale and revisit criteria below.
 
-Ship a focused v1 around **run, build, cache management, and a small stable `sh`
-API**. Add exact-argument process execution to that API. Keep the file format
-small and use ordinary Go modules and standard library IO. Fragments, a pipeline
-DSL, a filesystem utility suite, and a full language server can wait.
-
-GORN-V1-01–04, GORN-V1-09, and GORN-V1-25 are implemented, with linked
-verification evidence. Other items remain proposed
-unless their status records implementation. The backlog defines scope and
-acceptance criteria; it does not authorize implementation or publication.
-
+The assessment baseline preserves the original pre-alpha findings at its named
+commit/date; it is not the current delivery state. Per-item statuses and linked
+specifications/tests record the delivered behavior. This backlog defines scope
+and evidence; it does not authorize implementation or publication.
 See [next steps and delivery workflow](v1-next-steps.md) for the recommended
 implementation sequence, Plan/Goal handoff, and worktree/PR process.
 
@@ -220,12 +217,13 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** versioned releases (21),
-following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
+**Required v1 roadmap: complete.** [v1.0.0](https://github.com/gornkit/gorn/releases/tag/v1.0.0)
+is published as Latest after the candidate and final native release gates.
+The selected [build/runtime contract](../specs/gorn-build-runtime.md) governs the delivered implementation.
 Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
 cache ownership/repair (05), profile (06), dependency/helper delivery (07),
 lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13), shell/exact-argv stabilization (14–15), installed workflows
-(18), onboarding (19), compatibility (20), and measured startup (22) are implemented.
+(18), onboarding (19), compatibility (20), release delivery (21), and measured startup (22) are implemented.
 Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
 validation.
 
@@ -378,7 +376,7 @@ allowlist delivered under item 06. Evidence: [resolver and file-proxy regression
 [bundle tests](../../internal/script/bundle_test.go), and
 [installed-CLI offline cold/warm/bypass tests](../../dependency_integration_test.go).
 Private-proxy transport failures verify URL credential/query redaction. Actual
-toolchain/generator identity is delivered under 06; lifecycle remains 08.
+toolchain/generator identity is delivered under 06; lifecycle is delivered under 08.
 
 Acceptance: require concrete direct dependency versions and reject undeclared
 third-party imports with a source-oriented remedy instead of silently selecting
@@ -405,7 +403,7 @@ helper coordination, foreground terminal restoration, and platform/job-control
 limits are documented with alternatives and rationale in the
 [lifecycle contract and linked evidence](../specs/gorn-build-runtime.md#cancellation-and-process-ownership).
 Cache lock/lease cancellation is delivered with the locks in item 05; phase
-progress remains item 11.
+progress is delivered in item 11.
 
 Acceptance: define cancellation for dependency downloads, builds, scripts, and
 `sh` commands. Specify supported process-tree behavior per OS, bounded waiting
@@ -537,7 +535,7 @@ Independent destructive-path review found and corrected unreadable-namespace
 membership accounting: hidden owned bytes cannot appear as a satisfied zero-byte
 budget. `mise run test` passes in the documented private Git/TMPDIR environment;
 focused race checks, Windows/macOS target lint, dependency invariants, frontmatter
-and local-link checks pass. Native three-platform CI remains the landing gate.
+and local-link checks pass. Native three-platform CI passed before landing.
 
 ### GORN-V1-14 — Add exact argv execution to `sh`
 
@@ -551,7 +549,7 @@ constructing shell strings. Keep shell execution available for shell syntax.
 configuration, IO/env/dir, cancellation, status, and startup path as shell snippets.
 [Tests](../../sh/command_test.go) cover spaces, Unicode, quotes, empty arguments,
 metacharacters, executable paths, independent copies, IO/env/dir, and failures.
-Supported-shell verification is delivered with 15; compatibility policy remains
+Supported-shell verification is delivered with 15; compatibility policy is selected
 in 20.
 
 Acceptance: arguments containing spaces, quotes, wildcard/metacharacters, and
@@ -582,11 +580,14 @@ login startup, inherited hooks, strictness and Windows quoting. `mise run test`
 passes with the documented private Git/TMPDIR fixture, including embedded-helper
 execution and lifecycle regression tests. Race checks, Windows/macOS target lint,
 dependency invariants and documentation checks pass. Independent P0 transport
-review found no remaining issue; native three-platform CI is the landing gate.
+review found no remaining issue; native three-platform CI passed before landing.
 
 ### GORN-V1-16 — Add a non-executing check workflow
 
 **P2 · Feature · M · Depends: 01–03, 07, 11**
+
+**Status: deferred beyond v1.** Alternatives, trade-offs and revisit criteria
+are recorded in [the scope table](#scope-deliberately-deferred).
 
 Provide `gorn check <script>` for CI and authoring. Parse, generate, resolve
 declared dependencies, and compile-check without executing user code.
@@ -599,6 +600,9 @@ An editor can invoke the command without requiring a new language server.
 ### GORN-V1-17 — Provide an escape hatch into ordinary Go
 
 **P2 · Feature · M · Depends: 02, 07, 09, 12**
+
+**Status: deferred beyond v1.** Alternatives, trade-offs and revisit criteria
+are recorded in [the scope table](#scope-deliberately-deferred).
 
 Implement `gorn eject <script> <directory>` if core work leaves capacity. This
 reduces adoption risk when a file grows into a normal application.
@@ -629,10 +633,10 @@ Evidence: [dependency workflows](../../dependency_workflow_test.go),
 [progress](../../progress_integration_test.go), and existing process/cache tests.
 POSIX installed cancellation/terminal tests and native Windows backend tree/fallback
 and sharing-failure tests run on their supported hosts; their guarantees remain
-platform-specific. Actual published-helper resolution remains release gate 21. Default `mise run test`
+platform-specific. Actual published-helper resolution is verified by release gate 21. Default `mise run test`
 passes without environment overrides; focused installed-workflow race checks,
 Windows/macOS target lint, dependency invariants and documentation checks pass.
-Native three-platform CI remains the landing gate.
+Native three-platform CI passed before landing.
 
 Ordinary-Go compiler-oracle fixtures now initialize private valid Git roots.
 This resolves the observed invalid ancestor .git issue at its test boundary,
@@ -649,7 +653,7 @@ and optional helpers/dependencies. The authoritative
 [workflow guide](../specs/gorn-workflows.md) documents permissions, network/offline
 behavior, host dependence, stdio/cwd/status, cancellation and troubleshooting.
 Alternatives and rationale explain stdlib-first onboarding, mutable development
-installation before an approved release, export as the no-Go runtime boundary,
+installation versus fixed release tags, export as the no-Go runtime boundary,
 and deterministic tests versus published release smoke.
 
 [Maintained examples](../../examples/hello.gorn) and their
@@ -660,7 +664,7 @@ in README and the format specification compile in
 [documentation tests](../../internal/script/generator_test.go).
 Current format, runner/cache, workflow and helper contracts live outside the
 frozen archive. Versioned distribution and source-install version reporting
-remain in 21; supporting implementation packages and API policy remain in 20.
+are delivered in 21; supporting implementation packages and API policy are delivered in 20.
 
 ### GORN-V1-20 — Define the v1 compatibility surface
 
@@ -687,20 +691,20 @@ identities without adopting old layouts. Default `mise run test`, focused race
 checks, Windows/macOS target lint, dependency-graph/embedding/mirror checks and
 documentation checks pass. Independent P0 review verified every moved production
 file after import/comment normalization and found only the intended floor check
-as a behavior change. Native three-platform CI remains the landing gate.
+as a behavior change. Native three-platform CI passed before landing.
 
 ### GORN-V1-21 — Deliver and smoke-test versioned releases
 
 **P1 · Delivery · M · Depends: 12, 18–20, 22**
 
-**Status: implemented and candidate-qualified; stable publication remains.**
+**Status: implemented and released as v1.0.0.**
 The [release contract](../specs/gorn-release.md) selects candidate-first
 `v1.0.0-rc.1` then `v1.0.0`, five archive targets, native three-platform
 verification, immutable tags/assets and gated Latest promotion. It records
 alternatives, trade-offs, the unavoidable public-module tag ordering risk and
 recovery. Contributor tooling, reusable CI, published-asset/module smokes and
-[upgrade notes](../releases/v1.0.0.md) are delivered together. Actual stable
-publication evidence remains required before completion.
+[upgrade notes](../releases/v1.0.0.md) are delivered together. Candidate and
+stable publication/verification gates are complete.
 
 Focused version/cache-identity, archive/checksum, poisoned resolver-environment,
 preview/wrong-revision and dependency-boundary checks pass. Independent P0 review
@@ -735,6 +739,16 @@ Published Linux warm p95 is 52.17–52.96 ms, fifty samples per fixture, with
 [raw evidence](../benchmarks/2026-10-17-rc1-startup-linux-amd64.json). Candidate
 qualification and stable install/upgrade guidance are recorded before final tagging.
 
+Stable `v1.0.0` at `271d81b1fa6afaaff624e760b0282097abe709f0` passes
+[the final release workflow](https://github.com/gornkit/gorn/actions/runs/39047057727)
+and is promoted to Latest. Native Linux/macOS/Windows jobs validate actual
+downloaded archives, public source installation and compiled exact-tag helper
+selection; local checks independently verify all seven asset digests and repeat
+the public install/archive/export/helper workflow. Final Linux warm p95 is
+51.71–52.85 ms (fifty samples per fixture) with [raw delivered-byte evidence](../benchmarks/2026-10-17-v1-startup-linux-amd64.json).
+The final source tag becomes public before smoke, as documented; every final gate
+passed and no tag/asset replacement was needed.
+
 ### GORN-V1-22 — Measure whether reruns feel immediate
 
 **P1 · Validation/improvement · M · Depends: 05–07, 18**
@@ -749,19 +763,22 @@ populated-Go-cache cold and bypass distributions separate compilation from reuse
 
 [The internal benchmark tool](../../internal/startupbench/main.go) owns private
 Go/Gorn caches and a deterministic local module proxy. Warm runs make zero
-requests and retain the same publication; actual public-module transport remains
-release smoke work. Means, p95, min/max and all samples are saved in
+requests and retain the same publication; actual public-module transport is
+verified in release smoke item 21. Means, p95, min/max and all samples are saved in
 [the reference data](../benchmarks/2026-10-17-startup-linux-amd64.json).
 The measured budget leaves headroom without weakening full integrity validation;
 no optimization is selected. Shared CI does not assert a portable timing limit.
 Published candidate flags/bytes have passed the warm reference recheck (52.17–52.96 ms p95, fifty samples per fixture). The full
 benchmark and short smoke pass, raw statistics are independently recomputed, and
 default `mise run test`, Windows/macOS target lint, dependency boundaries and
-documentation checks pass. Native three-platform CI remains the landing gate.
+documentation checks pass. Native three-platform CI passed before landing.
 
 ### GORN-V1-23 — Format `.gorn` files without changing their meaning
 
 **P2 · Feature · M · Depends: 02–03, 10, 25 decision**
+
+**Status: deferred beyond v1.** Alternatives, trade-offs and revisit criteria
+are recorded in [the scope table](#scope-deliberately-deferred).
 
 Consider `gorn fmt` with write and check-only modes after source-preservation
 work is solid. Preserve shebang/directives and use Go's formatter for the chosen
@@ -774,6 +791,9 @@ Document lightweight editor use. A generated-file/gopls bridge is future work.
 ### GORN-V1-24 — Reduce dependency setup friction
 
 **P2 · Feature · M · Depends: 07, 10, 18**
+
+**Status: deferred beyond v1.** Alternatives, trade-offs and revisit criteria
+are recorded in [the scope table](#scope-deliberately-deferred).
 
 Consider a helper to add or update a requirement, and/or prefetch dependencies
 for CI, only after the dependency contract is settled.
@@ -797,17 +817,17 @@ The [implementation record](v1-standard-main-plan.md) records acceptance
 coverage, validation commands, environment handling, and the source-preservation
 review correction.
 No migration tooling, dedicated legacy diagnostics, dual grammar, or automatic
-extension change was introduced. Full build identity, dependency pinning, and
-other runner fixes remain separate backlog items.
+extension change was introduced. Full build identity, dependency pinning and
+other runner fixes are delivered in their respective items.
 
 Implementation model recommendation: **GPT-6.1 Sol (`gpt-6.1-sol`), high reasoning**.
 
 ## Scope deliberately deferred
 
 | Candidate | Why it waits | Revisit when |
+| --- | --- | --- |
 | Check/eject commands (16–17) | Build already compiles without execution, and standard source plus inspection provides an ordinary-Go escape path; extra authoring/export UX is not required for v1 | Repeated CI or growing-script workflows justify dedicated commands |
 | Format/dependency convenience (23–24) | Preserved ordinary Go and explicit concrete requirements cover the core workflow; rewriting/prefetch commands add another user surface | Authoring evidence shows enough recurring friction to justify source mutation helpers |
-| --- | --- | --- |
 | Fragments/includes and `.gfrag` | Adds source/dependency/mapping complexity before the single-file contract is stable | Real scripts need local organization and ordinary modules/eject do not suffice |
 | `//gorn:replace` and workspace integration | Introduces local build inputs and portability rules | A concrete local-module workflow justifies it after cache/dependency identity is settled |
 | Structured pipelines and line-event iterators | Adds lifecycle, backpressure, and failure semantics | Exact argv plus ordinary Go IO is demonstrably insufficient |
@@ -821,13 +841,13 @@ Implementation model recommendation: **GPT-6.1 Sol (`gpt-6.1-sol`), high reasoni
 The source-format decision (25) is implemented in the
 [authoritative format specification](../specs/gorn-script-format.md). The
 [build/runtime design](../specs/gorn-build-runtime.md) selects dependency, build,
-and process contracts with alternatives and rationale. Implement and verify those
-contracts before beta, then settle the remaining release surface:
+and process contracts with alternatives and rationale. Those contracts and the
+release surface are now implemented and verified:
 
 1. **Dependency identity (07):** delivered bundled helper bytes, explicit parent
    requirements for published helper mode, pinned-graph resolution, and saved
    module/checksum provenance. Offline/private-proxy regressions are in place;
-   release-wide verification remains part of 18–22.
+   release-wide verification is complete through 18–22.
 2. **Build environment (06):** delivered the local installed toolchain, pure-Go
    host profile, supported flag allowlist, and generator/profile cache identity.
 3. **Process behavior (08, 15):** delivered ownership/cancellation, foreground
@@ -835,7 +855,7 @@ contracts before beta, then settle the remaining release surface:
    POSIX terminals and native Windows process/sharing tests.
 4. **Compatibility (20):** selected public source/CLI/JSON/helper surfaces and
    enforced private implementation packages, dependency invariants and Go floor.
-   **Distribution (21)** remains the final required release delivery slice.
+   **Distribution (21)** delivers the verified candidate and stable v1.0.0 release.
 5. **Startup (22):** measured all cache states and selected a reference-host
    budget from recorded distributions, retaining integrity guarantees.
 
@@ -844,6 +864,12 @@ its backlog items are complete. Release-wide validation remains required even
 when focused implementation tests pass.
 
 ## v1 release gate
+
+**Verified outcome:** all required P0/P1 items pass in v1.0.0. Candidate and final
+[release runs](https://github.com/gornkit/gorn/actions/workflows/release.yml)
+verify native installs/archives/helper resolution; exact-tag evidence is linked
+in 21. Recorded stable startup remains within budget. Optional P2 items are
+explicitly deferred above and do not hold the required gate open.
 
 **Pass condition:** all P0 and P1 items are complete, with linked implementation
 and validation evidence. Optional work can be omitted without delaying the

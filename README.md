@@ -21,7 +21,7 @@ gorn --version
 Put Go's binary directory on PATH: `go env GOBIN` if set, otherwise the `bin`
 directory under `go env GOPATH`. These Go commands work in Unix shells and
 PowerShell. Source installs report the selected module version. For development,
-use `@main`; the validated candidate is `@v1.0.0-rc.1`. Downloading Go modules
+use `@main`, which follows development and can change. Downloading Go modules
 normally needs network access on first install.
 
 You can also download a matching archive from [GitHub Releases](https://github.com/gornkit/gorn/releases),

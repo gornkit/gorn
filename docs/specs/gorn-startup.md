@@ -134,3 +134,16 @@ local published-archive/source-install/helper verification and native three-plat
 release smoke pass. This measures delivered release flags/bytes rather than
 extrapolating from an unstripped development executable. It does not create a
 portable CI timing promise.
+
+## Published stable qualification
+
+The actual `v1.0.0` Linux/amd64 archive passes the same warm reference check:
+fifty samples per fixture, p95 52.36 ms tiny, 52.85 ms preamble and 51.71 ms
+dependency. [Raw stable data](../benchmarks/2026-10-17-v1-startup-linux-amd64.json)
+records binary SHA-256
+`2f0877273c4a67ad9204f3c646390e9b6cd451fafd459a318c55f26804d3b8aa`
+and source/embedded VCS revision `271d81b1fa6afaaff624e760b0282097abe709f0`.
+Independent statistics recomputation and all seven published asset checksums pass.
+Final native release verification and local public install/archive/helper smokes
+pass. The delivered stable build meets the selected budget while retaining all
+integrity checks; architecture coverage and timing limits remain as stated above.

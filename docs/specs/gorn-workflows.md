@@ -12,11 +12,14 @@ summary: Tested installation and onboarding, run/build/cache workflows, dependen
 
 The runner's supported Go floor is 1.26.4. Install Go and put both `go` and its
 binary output directory on PATH. The output directory is `go env GOBIN`, or
-`<go env GOPATH>/bin` when GOBIN is empty. Until a versioned release is approved,
-`go install github.com/gornkit/gorn@main` selects the changing development build.
+`<go env GOPATH>/bin` when GOBIN is empty. Install the fixed release with
+`go install github.com/gornkit/gorn@v1.0.0`; `@main` selects changing development.
 Use `gorn --version` and `gorn --help` to verify the installed command. Source
-installs currently may display `gorn dev`; the release workflow will define
-version-stamped distribution.
+installs report their selected module version; explicit linker stamps take
+precedence, while local VCS checkout builds retain `dev` without a stamp.
+[Release archives](https://github.com/gornkit/gorn/releases/tag/v1.0.0) provide
+an alternative install path with checksums, documented targets and native coverage
+in the [release contract](gorn-release.md).
 
 Use the [README first script](../../README.md#your-first-script) or the maintained
 [hello example](../../examples/hello.gorn). It is a complete Go main file with
@@ -141,12 +144,13 @@ records bounds, JSON, ownership, concurrency and Windows sharing behavior.
 ## Product choices and verification
 
 A stdlib-first example teaches ordinary Go and works offline without dependency
-setup. The preamble remains an optional convenience. Installing `@latest` before
-an approved release would imply a fixed supported version that does not exist;
-`@main` describes development honestly, with versioned install deferred to release
-delivery. Export serves hosts without Go rather than weakening warm identity
-validation. Network effects stay explicit; dependency tests use a controlled
-loopback proxy, while release smoke tests separately verify published modules.
+setup. The preamble remains an optional convenience. A fixed release tag gives a
+reproducible installation choice; `@main` remains available when following
+development is intentional. Published source installs report Go's selected version,
+while stamped archives identify their release. [Candidate and stable verification](gorn-release.md#stable-release-verification)
+proves both paths instead of inferring public availability from local replacements.
+Export serves hosts without Go while retaining warm identity validation. Network
+effects stay explicit; dependency tests use a controlled loopback proxy, while release smoke tests separately verify published modules.
 
 [Installed workflow tests](../../workflow_integration_test.go) execute maintained
 examples and onboarding commands. [Dependency tests](../../dependency_workflow_test.go)
