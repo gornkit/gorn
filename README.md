@@ -68,8 +68,8 @@ gorn --version
 #   -v, --verbose   diagnostics on stderr
 ```
 
-Known pre-alpha issue: inspection flags can execute an already cached script.
-Add `--no-cache` to inspection commands until GORN-V1-01 is fixed.
+Inspection parses and generates source without running the script, accessing the
+build cache, or invoking Go. Output-write failures are reported as errors.
 
 The build cache lives under `$GORN_CACHE` (falling back to the user cache dir,
 then a temp dir).

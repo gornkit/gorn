@@ -1,11 +1,16 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gornkit/gorn/pkg/app"
+	"github.com/gornkit/gorn/pkg/cache"
 )
 
 func TestRunCLIStandardMainBuildAndRun(t *testing.T) {
@@ -74,6 +79,135 @@ func TestRunCLIColdInspectionPreservesSource(t *testing.T) {
 		}
 		if _, err := os.Stat(marker); !os.IsNotExist(err) {
 			t.Fatalf("inspection executed script: %v", err)
+		}
+	}
+}
+
+func TestRunCLIInspectionNeverExecutesOrChangesCache(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds real cached scripts")
+	}
+	for _, state := range []string{"cold", "warm", "bypass", "corrupt manifest", "corrupt binary"} {
+		t.Run(state, func(t *testing.T) {
+			cachePath := filepath.Join(t.TempDir(), "cache")
+			t.Setenv("GORN_CACHE", cachePath)
+			dir := t.TempDir()
+			path, marker := filepath.Join(dir, "inspect.gorn"), filepath.Join(dir, "executed")
+			source := fmt.Sprintf("package main\nimport \"os\"\nfunc main(){if err := os.WriteFile(%q, []byte(\"ran\"), 0600); err != nil {panic(err)}}", marker)
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if state != "cold" {
+				got := runCLIForTest(t, "run", path)
+				if got.err != nil {
+					t.Fatal(got.err)
+				}
+				if err := os.Remove(marker); err != nil {
+					t.Fatal(err)
+				}
+				original, err := app.New(path, []byte(source))
+				if err != nil {
+					t.Fatal(err)
+				}
+				root := cache.Root(cachePath)
+				var corrupt string
+				switch state {
+				case "corrupt manifest":
+					corrupt = filepath.Join(root.Dir(original), "manifest.json")
+				case "corrupt binary":
+					corrupt = root.BinPath(original)
+				}
+				if corrupt != "" {
+					if err := os.WriteFile(corrupt, []byte("corrupt"), 0o600); err != nil { //nolint:gosec // G703: controlled fixture cache path.
+						t.Fatal(err)
+					}
+				}
+			}
+			before := cacheSnapshot(t, cachePath)
+			// Inspect must work with no compiler available, even on a cache miss.
+			t.Setenv("PATH", t.TempDir())
+			for _, flags := range [][]string{{"--print-mod"}, {"--print-main"}, {"--print-mod", "--print-main"}} {
+				for _, command := range [][]string{{"run"}, {}} {
+					args := append([]string(nil), command...)
+					args = append(args, flags...)
+					if state == "bypass" {
+						args = append(args, "--no-cache")
+					}
+					got := runCLIForTest(t, append(args, path)...)
+					if got.err != nil {
+						t.Fatal(got.err)
+					}
+					if _, err := os.Stat(marker); !os.IsNotExist(err) {
+						t.Fatalf("inspection executed script: %v", err)
+					}
+					if len(flags) == 1 && flags[0] == "--print-mod" && got.stdout != "module gorn.local/app\n\ngo 1.26\n" {
+						t.Fatalf("unexpected module output: %q", got.stdout)
+					}
+					if len(flags) == 1 && flags[0] == "--print-main" && strings.Contains(got.stdout, "// ---") {
+						t.Fatalf("unexpected artifact header: %q", got.stdout)
+					}
+					if len(flags) == 2 && (!strings.Contains(got.stdout, "// --- go.mod ---\n") || !strings.Contains(got.stdout, "// --- main.go ---\n")) {
+						t.Fatalf("missing artifact headers: %q", got.stdout)
+					}
+					if strings.Contains(strings.Join(flags, " "), "--print-main") && !strings.Contains(got.stdout, source) {
+						t.Fatalf("missing source: %q", got.stdout)
+					}
+					if strings.Contains(strings.Join(flags, " "), "--print-mod") && !strings.Contains(got.stdout, "module gorn.local/app") {
+						t.Fatalf("missing module: %q", got.stdout)
+					}
+					if after := cacheSnapshot(t, cachePath); before != after {
+						t.Fatalf("inspection changed cache: before=%q after=%q", before, after)
+					}
+				}
+			}
+		})
+	}
+}
+
+func cacheSnapshot(t *testing.T, root string) string {
+	t.Helper()
+	var snapshot strings.Builder
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if os.IsNotExist(err) && path == root {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(&snapshot, path)
+		if !entry.IsDir() {
+			data, err := os.ReadFile(path) //nolint:gosec // G304: controlled fixture cache paths.
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(&snapshot, "%x\n", sha256.Sum256(data))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snapshot.String()
+}
+
+func TestRunCLIInspectionNeedsNoCacheAccess(t *testing.T) {
+	dir := t.TempDir()
+	blocked := filepath.Join(dir, "regular-file")
+	if err := os.WriteFile(blocked, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GORN_CACHE", filepath.Join(blocked, "cache"))
+	t.Setenv("HOME", blocked)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(blocked, "user-cache"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(blocked, "user-cache"))
+	t.Setenv("TMPDIR", blocked)
+	t.Setenv("TMP", blocked)
+	t.Setenv("TEMP", blocked)
+	t.Setenv("PATH", "")
+	for _, flag := range []string{"--print-main", "--print-mod"} {
+		got := runCLIForTest(t, "run", flag, "testdata/run_hello.gorn")
+		if got.err != nil || got.stdout == "" {
+			t.Fatalf("%s with inaccessible caches: err=%v stdout=%q", flag, got.err, got.stdout)
 		}
 	}
 }

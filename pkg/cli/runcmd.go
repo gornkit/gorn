@@ -61,20 +61,6 @@ func Run(o RunOpts) error {
 		return fmt.Errorf("read %s: %w", o.ScriptPath, err)
 	}
 
-	cacheRoot, err := cache.Open()
-	if err != nil {
-		return err
-	}
-
-	if !o.NoCache {
-		if appBin, ok := cacheRoot.Lookup(source); ok {
-			if o.Verbose {
-				_, _ = fmt.Fprintf(o.Stderr, "cache: hit %s\n", appBin)
-			}
-			return execCmd(o, appBin)
-		}
-	}
-
 	file, err := script.Parse(source)
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", o.ScriptPath, err)
@@ -99,8 +85,21 @@ func Run(o RunOpts) error {
 
 	// The print flags are inspect-only: print and do not run.
 	if o.PrintMod || o.PrintMain {
-		printArtifacts(o, gen)
-		return nil
+		return printArtifacts(o, gen)
+	}
+
+	cacheRoot, err := cache.Open()
+	if err != nil {
+		return err
+	}
+
+	if !o.NoCache {
+		if appBin, ok := cacheRoot.Lookup(source); ok {
+			if o.Verbose {
+				_, _ = fmt.Fprintf(o.Stderr, "cache: hit %s\n", appBin)
+			}
+			return execCmd(o, appBin)
+		}
 	}
 
 	entry, err := cacheRoot.Build(source, gen, o.NoCache)
@@ -139,21 +138,38 @@ func execCmd(o RunOpts, appBin string) error {
 // printArtifacts prints the requested generated artifacts to stdout. When both
 // are requested it prefixes headers; a single artifact is emitted raw so it
 // stays pipeable.
-func printArtifacts(o RunOpts, gen *script.Generated) {
+func printArtifacts(o RunOpts, gen *script.Generated) error {
 	withHeaders := o.PrintMod && o.PrintMain
-
-	if o.PrintMod {
-		if withHeaders {
-			_, _ = fmt.Fprintln(o.Stdout, "// --- go.mod ---")
+	for _, artifact := range []struct {
+		enabled bool
+		name    string
+		data    []byte
+	}{
+		{o.PrintMod, "go.mod", gen.ModGenerated},
+		{o.PrintMain, "main.go", gen.MainGenerated},
+	} {
+		if !artifact.enabled {
+			continue
 		}
-		_, _ = fmt.Fprint(o.Stdout, string(gen.ModGenerated))
-	}
-	if o.PrintMain {
 		if withHeaders {
-			_, _ = fmt.Fprintln(o.Stdout, "// --- main.go ---")
+			header := fmt.Sprintf("// --- %s ---\n", artifact.name)
+			n, err := io.WriteString(o.Stdout, header)
+			if err == nil && n != len(header) {
+				err = io.ErrShortWrite
+			}
+			if err != nil {
+				return fmt.Errorf("write %s header: %w", artifact.name, err)
+			}
 		}
-		_, _ = fmt.Fprint(o.Stdout, string(gen.MainGenerated))
+		n, err := o.Stdout.Write(artifact.data)
+		if err == nil && n != len(artifact.data) {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			return fmt.Errorf("write %s: %w", artifact.name, err)
+		}
 	}
+	return nil
 }
 
 func readSource(path string) (*app.Source, error) {
