@@ -1,6 +1,8 @@
 package sh
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -9,13 +11,30 @@ import (
 
 // Command is a configured shell snippet that can be executed or started.
 type Command struct {
-	shell    ShellSpec
-	script   string
-	startDir string
-	env      map[string]string
-	stdin    io.Reader
-	stdout   io.Writer
-	stderr   io.Writer
+	ctx        context.Context
+	contextSet bool
+	name       string
+	args       []string
+	shell      ShellSpec
+	script     string
+	startDir   string
+	env        map[string]string
+	stdin      io.Reader
+	stdout     io.Writer
+	stderr     io.Writer
+}
+
+// Cmd configures an executable and exact arguments, without a shell. Arguments
+// are copied; wildcards, variables, pipes, and quoting characters remain literal.
+func Cmd(name string, args ...string) Command {
+	return Command{name: name, args: append([]string(nil), args...)}
+}
+
+// Context returns a copy canceled by ctx. A nil supplied context fails at Start.
+// Without Context, a command uses context.Background.
+func (c Command) Context(ctx context.Context) Command {
+	c.ctx, c.contextSet = ctx, true
+	return c
 }
 
 // Dir returns a copy that runs in path.
@@ -64,15 +83,28 @@ func (c Command) Exec() Result {
 
 // Start starts the command without waiting for it.
 func (c Command) Start() (*Process, error) {
+	ctx := c.ctx
+	if !c.contextSet {
+		ctx = context.Background()
+	}
+	if ctx == nil {
+		return nil, fmt.Errorf("nil command context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	script := c.script
 	if len(c.shell.setupLines) > 0 {
 		lines := append([]string(nil), c.shell.setupLines...)
 		script = strings.Join(append(lines, script), "\n")
 	}
 
-	args := append([]string(nil), c.shell.args...)
-	args = append(args, script)
-	cmd := exec.Command(c.shell.base, args...) //nolint:gosec // ponytail: shell helper intentionally runs caller-selected shell snippets.
+	name, args := c.name, append([]string(nil), c.args...)
+	if name == "" {
+		name = c.shell.base
+		args = append(append([]string(nil), c.shell.args...), script)
+	}
+	cmd := exec.Command(name, args...) //nolint:gosec // G204: helper intentionally runs caller-selected programs or shell snippets.
 	cmd.Dir = c.startDir
 	cmd.Env = os.Environ()
 	for k, v := range c.env {
@@ -92,8 +124,9 @@ func (c Command) Start() (*Process, error) {
 		cmd.Stderr = os.Stderr
 	}
 
-	if err := cmd.Start(); err != nil {
+	core, err := startProcess(ctx, cmd, processOptions{inherit: true, terminal: true})
+	if err != nil {
 		return nil, err
 	}
-	return &Process{cmd: cmd}, nil
+	return &Process{core: core}, nil
 }

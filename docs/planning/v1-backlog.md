@@ -380,11 +380,17 @@ dependencies fail clearly. Use Go's resolver and checksum mechanisms.
 
 **P0 · Improvement · L · Depends: 04; coordinate with 15**
 
-Build commands and script execution have no context path. `sh.Process.Kill`
-kills only the shell; descendants can retain IO and delay `Wait()`.
-Evidence: [build subprocesses](../../pkg/cache/emit.go),
-[runner execution](../../pkg/cli/runcmd.go), [command](../../sh/command.go),
-and [process](../../sh/process.go).
+**Status: implemented.** Context reaches source collection, installed-Go
+discovery, resolution/builds, runtime execution, and helper commands. One automatic
+reaper serves repeated/concurrent waits. Linux/macOS group termination retains
+the leader through bounded TERM/KILL escalation; Windows uses bounded native
+tree termination with direct fallback. Go-owned pipe waits are bounded. Root
+interrupt/termination statuses, explicit embedding IO ownership, reserved bundled
+helper coordination, foreground terminal restoration, and platform/job-control
+limits are documented with alternatives and rationale in the
+[lifecycle contract and linked evidence](../specs/gorn-build-runtime.md#cancellation-and-process-ownership).
+Cache lock/lease cancellation is completed with the locks in item 05; phase
+progress remains item 11.
 
 Acceptance: define cancellation for dependency downloads, builds, scripts, and
 `sh` commands. Specify supported process-tree behavior per OS, bounded waiting
@@ -492,6 +498,12 @@ temporary directories safely. Bad entries remain diagnosable.
 Add a bounded `sh.Cmd(name string, args ...string)` entry point using the existing
 command configuration and result model. Ordinary commands should not require
 constructing shell strings. Keep shell execution available for shell syntax.
+
+**Status: core API delivered with 08.** Exact arguments use the same immutable
+configuration, IO/env/dir, cancellation, status, and startup path as shell snippets.
+[Tests](../../sh/command_test.go) cover spaces, Unicode, quotes, empty arguments,
+metacharacters, executable paths, independent copies, IO/env/dir, and failures.
+Final supported-shell/API verification remains coordinated with 15 and 20.
 
 Acceptance: arguments containing spaces, quotes, wildcard/metacharacters, and
 empty values arrive literally without shell interpretation. IO/env/dir,

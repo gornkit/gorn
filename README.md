@@ -77,6 +77,22 @@ from the invocation directory. Source supplied through `-` consumes stdin before
 the program starts. Relative `GORN_CACHE` paths resolve from the invocation
 directory; an unusable explicit cache path reports an error.
 
+Ctrl-C and termination cancel source collection and Go work. Foreground scripts
+receive terminal signals and may handle or ignore them; root cancellation or
+an observed interrupt exit triggers invocation cleanup.
+On Linux/macOS, Gorn cleans its process group with TERM and bounded KILL escalation
+and preserves foreground terminal input/Ctrl-C. Full suspend/resume job control
+and deliberately escaped groups are outside v1. Windows tree termination is best
+effort, using native taskkill and direct-process fallback. The
+[lifecycle contract](docs/specs/gorn-build-runtime.md#cancellation-and-process-ownership)
+documents IO ownership, timing, supported architectures, and platform limits.
+
+`sh.Cmd(name, args...)` runs exact arguments without shell interpretation.
+`sh.Bash().Shell(script)` retains shell syntax. Both support immutable
+`.Dir`, `.Env`, `.Stdin`, `.Stdout`, `.Stderr`, and `.Context(ctx)` configuration.
+Start returns a process with repeatable/concurrent Wait and idempotent Kill;
+cancellation errors support `errors.Is` with context cancellation/deadline errors.
+
 The build cache lives under `$GORN_CACHE` (falling back to the user cache dir,
 then a temp dir).
 
