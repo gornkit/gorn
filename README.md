@@ -12,8 +12,8 @@
 Pre-alpha, but the runner works end to end: `gorn run <script>` (or the
 `gorn <script>` shorthand) parses the script, generates a module, builds it
 with the Go toolchain, caches the binary keyed on a content hash, and runs it,
-forwarding args. The `sh` package has a usable shell-exec v0. The separate
-`gorn build` and `gorn cache` subcommands are still stubs.
+forwarding args. The `sh` package has a usable shell-exec v0. `gorn build` exports standalone binaries, and `gorn cache` inspects and manages
+owned build data.
 
 ## `sh` package
 
@@ -59,7 +59,11 @@ gorn <script.gorn> [-- args...]        # shorthand for run
 gorn run [flags] <script.gorn> [-- args...]
 gorn build app.gorn -o ./app            # compile a standalone host executable
 gorn build app.gorn -o ./app --force    # replace an existing regular output
-gorn cache                             # stub (not implemented)
+gorn cache path                        # selected cache root, without creating it
+gorn cache list --json                 # inventory and recorded build provenance
+gorn cache clean <key-prefix> --dry-run # preview one unambiguous entry
+gorn cache clean --all --yes           # skip active data; preserve unknown data
+gorn cache prune --max-age 168h --max-bytes 100000000 --yes
 gorn --version
 
 # run flags:
@@ -101,13 +105,24 @@ documents IO ownership, timing, supported architectures, and platform limits.
 Start returns a process with repeatable/concurrent Wait and idempotent Kill;
 cancellation errors support `errors.Is` with context cancellation/deadline errors.
 
-The build cache lives under `$GORN_CACHE` (falling back to the user cache dir,
-then a temp dir). Builds use full identity keys and OS-backed leases. Invalid
+The build cache uses `$GORN_CACHE`, otherwise the OS user cache directory,
+otherwise a temp directory if the OS cannot determine a user cache directory.
+Creation or permission errors fail explicitly. Builds use full identity keys and OS-backed leases. Invalid
 owned entries rebuild automatically; unrecognized data is preserved and reported.
 Concurrent cold invocations share one build, and active executables remain leased
 through use. `--no-cache` builds privately and cleans up afterward. Older cache
 layouts are left untouched. See the [cache contract](docs/specs/gorn-build-runtime.md#cache-publication-repair-and-management)
 for ownership, quarantine, cancellation and filesystem boundaries.
+
+Cache commands need no Go installation. `path`, `list` and `--dry-run` write no
+cache files. `list --json` reports schema-1 identity, source, build time, recorded
+profile, validity and separate byte totals for entries, stages, quarantine and
+unmanaged data. `clean --all` also collects abandoned owned stages/quarantine.
+Prune uses build age, then oldest-first logical entry bytes; active objects are
+skipped. `--max-bytes 0` requests an empty managed-entry cache. Incomplete byte
+counts or an unmet budget return status 1 with the observed report. Preview is a
+selection estimate and does not reserve activity. Mutation requires `--yes`;
+`--json` keeps reports on stdout and diagnostics on stderr.
 
 `gorn build` compiles without executing the script, reusing a valid cache entry
 or building privately with `--no-cache`. The exported executable runs without Go

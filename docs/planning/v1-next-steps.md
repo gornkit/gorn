@@ -27,7 +27,9 @@ GORN-V1-06 binds warm lookup, execution, and provenance to the installed
 toolchain/profile. GORN-V1-08 delivers lifecycle ownership and the core exact-argv
 helper API from 14. GORN-V1-11 delivers immediate phases, bounded diagnostic
 streaming, heartbeats, and quiet behavior. GORN-V1-05 delivers cache repair, independent ownership and cancellable leases.
-GORN-V1-12 delivers standalone binary export. Cache management (13) is next.**
+GORN-V1-12 delivers standalone binary export. GORN-V1-13 delivers read-only
+inventory and bounded, ownership-aware cache maintenance. Shell/API
+stabilization (14–15) is next.**
 
 ## Remaining sequence
 

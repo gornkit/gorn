@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	arg "github.com/alexflint/go-arg"
 	"github.com/gornkit/gorn/pkg/cli"
@@ -48,7 +49,33 @@ type buildArgs struct {
 }
 
 type cacheArgs struct {
-	// TODO
+	Path  *cachePathArgs  `arg:"subcommand:path" help:"Print the selected cache root without creating it"`
+	List  *cacheListArgs  `arg:"subcommand:list" help:"Inspect entries, provenance and preserved data"`
+	Clean *cacheCleanArgs `arg:"subcommand:clean" help:"Delete selected owned data, skipping active entries"`
+	Prune *cachePruneArgs `arg:"subcommand:prune" help:"Prune current owned entries by build age or byte budget"`
+}
+type (
+	cachePathArgs struct {
+		JSON bool `arg:"--json" help:"Emit versioned JSON"`
+	}
+	cacheListArgs struct {
+		JSON bool `arg:"--json" help:"Emit versioned JSON"`
+	}
+	cacheCleanArgs struct {
+		KeyPrefix string `arg:"positional" placeholder:"key-prefix" help:"One unambiguous lowercase hexadecimal key prefix"`
+		All       bool   `arg:"--all" help:"Select owned entries, abandoned stages and quarantine"`
+		Yes       bool   `arg:"--yes" help:"Authorize deletion without a prompt"`
+		DryRun    bool   `arg:"--dry-run" help:"Preview selection without deleting or reserving activity"`
+		JSON      bool   `arg:"--json" help:"Emit versioned JSON, including partial results"`
+	}
+)
+
+type cachePruneArgs struct {
+	MaxAge   *time.Duration `arg:"--max-age" placeholder:"duration" help:"Remove entries older than this build age (for example 24h)"`
+	MaxBytes *int64         `arg:"--max-bytes" placeholder:"bytes" help:"Evict oldest entries to meet a nonnegative logical-byte budget"`
+	Yes      bool           `arg:"--yes" help:"Authorize deletion without a prompt"`
+	DryRun   bool           `arg:"--dry-run" help:"Preview selection without deleting or reserving activity"`
+	JSON     bool           `arg:"--json" help:"Emit versioned JSON, including partial results"`
 }
 
 type CLI struct {
@@ -218,6 +245,15 @@ func runSelected(parser *arg.Parser, common *Common, stdout, stderr io.Writer) e
 	case *buildArgs:
 		return cmd.Run(common, stdout, stderr)
 	case *cacheArgs:
+		parser.WriteHelp(stdout)
+		return nil
+	case *cachePathArgs:
+		return cmd.Run(common, stdout, stderr)
+	case *cacheListArgs:
+		return cmd.Run(common, stdout, stderr)
+	case *cacheCleanArgs:
+		return cmd.Run(common, stdout, stderr)
+	case *cachePruneArgs:
 		return cmd.Run(common, stdout, stderr)
 	default:
 		parser.WriteHelp(stdout)
@@ -270,8 +306,26 @@ func (b *buildArgs) Run(common *Common, stdout, stderr io.Writer) error {
 	})
 }
 
-func (c *cacheArgs) Run(common *Common, stdout, stderr io.Writer) error {
-	return cli.Cache(cli.CacheOpts{
-		Verbose: common.Verbose,
-	})
+func cacheOptions(common *Common, stdout, stderr io.Writer, operation string, json bool) cli.CacheOpts {
+	return cli.CacheOpts{Operation: operation, JSON: json, Verbose: common.Verbose, Quiet: common.Quiet, Stdout: stdout, Stderr: stderr}
+}
+
+func (c *cachePathArgs) Run(common *Common, stdout, stderr io.Writer) error {
+	return cli.CacheContext(common.ctx, cacheOptions(common, stdout, stderr, "path", c.JSON))
+}
+
+func (c *cacheListArgs) Run(common *Common, stdout, stderr io.Writer) error {
+	return cli.CacheContext(common.ctx, cacheOptions(common, stdout, stderr, "list", c.JSON))
+}
+
+func (c *cacheCleanArgs) Run(common *Common, stdout, stderr io.Writer) error {
+	options := cacheOptions(common, stdout, stderr, "clean", c.JSON)
+	options.KeyPrefix, options.All, options.Yes, options.DryRun = c.KeyPrefix, c.All, c.Yes, c.DryRun
+	return cli.CacheContext(common.ctx, options)
+}
+
+func (c *cachePruneArgs) Run(common *Common, stdout, stderr io.Writer) error {
+	options := cacheOptions(common, stdout, stderr, "prune", c.JSON)
+	options.MaxAge, options.MaxBytes, options.Yes, options.DryRun = c.MaxAge, c.MaxBytes, c.Yes, c.DryRun
+	return cli.CacheContext(common.ctx, options)
 }

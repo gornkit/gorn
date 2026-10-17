@@ -2,11 +2,7 @@ package cache
 
 import (
 	"cmp"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,14 +21,42 @@ var binName = func() string {
 // Root is the root directory of the gorn build cache.
 type Root string
 
-// Open resolves and creates the cache root (GORN_CACHE, else the user
-// cache dir, else a temp dir).
+// Resolve selects the cache root without creating directories or probing
+// writability. Existing aliases resolve physically; absent roots stay absolute.
+func Resolve() (Root, error) {
+	path := getRoot()
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", rootLabel(), err)
+	}
+	physical, err := filepath.EvalSymlinks(absolute)
+	if err == nil {
+		return Root(physical), nil
+	}
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("%s %q: %w", rootLabel(), absolute, err)
+	}
+	return Root(absolute), nil
+}
+
+// Open creates the deterministically selected root. A creation failure never
+// silently redirects builds away from the location reported by Resolve.
 func Open() (Root, error) {
-	root, err := getRoot()
+	root, err := Resolve()
 	if err != nil {
 		return "", err
 	}
-	return Root(root), nil
+	if err := os.MkdirAll(root.Path(), 0o700); err != nil {
+		return "", fmt.Errorf("%s %q: %w", rootLabel(), root.Path(), err)
+	}
+	return root, nil
+}
+
+func rootLabel() string {
+	if os.Getenv("GORN_CACHE") != "" {
+		return "GORN_CACHE"
+	}
+	return "cache root"
 }
 
 // Path returns the cache root directory.
@@ -91,48 +115,12 @@ func (c Root) Lookup(s *app.Source) (string, bool) {
 	return bin, true
 }
 
-// fileSHA256 returns the hex SHA-256 of the file at path.
-func fileSHA256(path string) (string, error) {
-	f, err := os.Open(path) //nolint:gosec // G304: path is a gorn-computed cache path, not user input.
-	if err != nil {
-		return "", err
+func getRoot() string {
+	if path := os.Getenv("GORN_CACHE"); path != "" {
+		return path
 	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	if path, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(path, "gorn")
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func getRoot() (string, error) {
-	// 1. GORN_CACHE
-	// 2. UserCacheDir/gorn
-	// 3. /tmp/gorn
-
-	if cacheRoot := os.Getenv("GORN_CACHE"); cacheRoot != "" {
-		root, err := filepath.Abs(cacheRoot)
-		if err != nil {
-			return "", fmt.Errorf("resolve GORN_CACHE %q: %w", cacheRoot, err)
-		}
-		if err := os.MkdirAll(root, 0o700); err != nil { //nolint:gosec // G703: operator-selected cache root.
-			return "", fmt.Errorf("GORN_CACHE %q: %w", root, err)
-		}
-		return root, nil
-	}
-
-	userCacheDir, err := os.UserCacheDir()
-	if err == nil {
-		gornCacheDir := filepath.Join(userCacheDir, "gorn")
-		if err := os.MkdirAll(gornCacheDir, 0o700); err == nil {
-			return gornCacheDir, nil
-		}
-	}
-
-	tmpGorn := filepath.Join(os.TempDir(), "gorn", cmp.Or(os.Getenv("USER"), os.Getenv("USERNAME"), "shared"))
-	if err := os.MkdirAll(tmpGorn, 0o700); err == nil { //nolint:gosec // G703: USER/USERNAME are local env vars, not remote input.
-		return tmpGorn, nil
-	}
-
-	return "", errors.New("failed to determine cache root")
+	return filepath.Join(os.TempDir(), "gorn", cmp.Or(os.Getenv("USER"), os.Getenv("USERNAME"), "shared"))
 }

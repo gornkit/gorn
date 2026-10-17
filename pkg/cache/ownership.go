@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -75,8 +76,12 @@ func walkDirs(root, rel string, create bool) error {
 func readOwner(dir string) (ownership, error) {
 	var owner ownership
 	path := filepath.Join(dir, ownerName)
-	if !regular(path) {
-		return owner, errors.New("missing or nonregular cache ownership record")
+	info, err := os.Lstat(path) //nolint:gosec // G703: internal cache ownership path, validated before mutation.
+	if err != nil {
+		return owner, err
+	}
+	if !info.Mode().IsRegular() {
+		return owner, errors.New("nonregular cache ownership record")
 	}
 	data, err := os.ReadFile(path) //nolint:gosec // validated internal cache path
 	if err != nil {
@@ -191,21 +196,5 @@ func removeStage(dir, stageID string, identity os.FileInfo) error {
 	if err != nil || owner.StageID != stageID {
 		return errors.New("stage ownership changed; refusing cleanup")
 	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.Name() == ownerName {
-			continue
-		}
-		// RemoveAll removes symlinks themselves and never traverses their targets.
-		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
-			return err
-		}
-	}
-	if err := os.Remove(filepath.Join(dir, ownerName)); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
-		return err
-	}
-	return os.Remove(dir) //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
+	return removeOwnedDir(context.Background(), dir, owner, identity)
 }
