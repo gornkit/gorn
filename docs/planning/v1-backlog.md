@@ -450,9 +450,18 @@ decision. Update the authoritative contract and add line-specific regressions.
 
 **P1 · Improvement · M · Depends: 04, 07–08**
 
-`CombinedOutput` buffers tidy/build activity; even verbose cache-miss output is
-emitted only after the build. A first run can appear stalled.
-Evidence: [build output](../../pkg/cache/emit.go) and [run diagnostics](../../pkg/cli/runcmd.go).
+**Status: implemented.** Immediate preparation phases and two-second heartbeats
+go to stderr. Quiet suppresses Gorn activity while preserving sanitized Go
+diagnostics and script stderr. Go errors stream as complete sanitized lines,
+including conservative EOF redaction and bounded oversized-line handling, without
+final-error replay. Reporting stops and joins before runtime terminal handoff;
+original runtime IO and background embedding-reader ownership are retained.
+Output failures preserve their IO cause and stop pending Go work. Internal
+generated-source dumps require verbose; print flags remain deliberate inspection.
+The [selected decisions, alternatives, trade-offs, and behavioral evidence](../specs/gorn-build-runtime.md#progress-and-verification)
+include real installed-CLI cold/warm/bypass, slow source/dependency work, quiet
+errors, redaction, and stdout/runtime integrity. Lock-wait phases join this same
+reporter when item 05 implements locks.
 
 Acceptance: provide immediate phase information and periodic status during long
 work on stderr, with a documented quiet mode for automation. Stream useful Go

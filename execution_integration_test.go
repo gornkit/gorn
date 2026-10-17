@@ -31,7 +31,9 @@ func builtCLI(t *testing.T, flags ...string) string {
 
 func invokeCLI(t *testing.T, bin, cwd, input string, args ...string) runResult {
 	t.Helper()
-	cmd := exec.Command(bin, args...) //nolint:gosec // G204: test-built CLI with controlled fixture arguments.
+	// Contract fixtures opt out of routine activity; progress behavior has its
+	// own installed-CLI coverage without this helper's quiet flag.
+	cmd := exec.Command(bin, append([]string{"--quiet"}, args...)...) //nolint:gosec // G204: test-built CLI with controlled fixture arguments.
 	cmd.Dir = cwd
 	cmd.Stdin = strings.NewReader(input)
 	var stdout, stderr bytes.Buffer

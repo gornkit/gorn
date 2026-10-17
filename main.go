@@ -25,6 +25,7 @@ var subcommandNames = []string{"run", "build", "cache"}
 
 type Common struct {
 	Verbose bool `arg:"-v,--verbose" help:"Enable verbose diagnostics on stderr"`
+	Quiet   bool `arg:"-q,--quiet" help:"Suppress phase and heartbeat progress; retain errors and script stderr"`
 	ctx     context.Context
 	input   cli.Input
 }
@@ -190,7 +191,8 @@ func usageError(err error) error {
 
 func startsWithSubcommand(args []string) bool {
 	for _, arg := range args {
-		if arg == "-v" || arg == "--verbose" || strings.HasPrefix(arg, "--verbose=") || strings.HasPrefix(arg, "-v=") {
+		if arg == "-v" || arg == "--verbose" || strings.HasPrefix(arg, "--verbose=") || strings.HasPrefix(arg, "-v=") ||
+			arg == "-q" || arg == "--quiet" || strings.HasPrefix(arg, "--quiet=") || strings.HasPrefix(arg, "-q=") {
 			continue
 		}
 		return slices.Contains(subcommandNames, arg)
@@ -235,6 +237,7 @@ func (r *runArgs) Run(common *Common, stdout, stderr io.Writer) error {
 		HelperSources: helperSources,
 		Stderr:        stderr,
 		Verbose:       common.Verbose,
+		Quiet:         common.Quiet,
 		PrintMod:      r.PrintMod,
 		PrintMain:     r.PrintMain,
 		NoCache:       r.NoCache,

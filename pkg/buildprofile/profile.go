@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/gornkit/gorn/pkg/process"
+	"github.com/gornkit/gorn/pkg/progress"
 )
 
 // Record is safe to write as provenance. Linker values and resolver settings
@@ -174,6 +175,9 @@ func DiscoverContext(ctx context.Context, sourceGo, helperDigest string) (*Profi
 		return nil, fmt.Errorf("nil discovery context")
 	}
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := progress.Phase(ctx, "discovering installed Go"); err != nil {
 		return nil, err
 	}
 	launcher, err := exec.LookPath("go")

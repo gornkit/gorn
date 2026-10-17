@@ -13,6 +13,7 @@ import (
 	"github.com/gornkit/gorn/pkg/buildprofile"
 	"github.com/gornkit/gorn/pkg/cache"
 	"github.com/gornkit/gorn/pkg/process"
+	"github.com/gornkit/gorn/pkg/progress"
 	"github.com/gornkit/gorn/pkg/script"
 )
 
@@ -23,6 +24,7 @@ type RunOpts struct {
 	Stdout         io.Writer
 	Stderr         io.Writer
 	Verbose        bool
+	Quiet          bool
 	PrintMod       bool
 	PrintMain      bool
 	NoCache        bool
@@ -49,6 +51,9 @@ func (r *RunOpts) invocation() string {
 		if r.NoCache {
 			flags = append(flags, "--no-cache")
 		}
+		if r.Quiet {
+			flags = append(flags, "--quiet")
+		}
 		fmt.Fprintf(&builder, "Flags:  %v\n", flags)
 
 		r.invocationText = builder.String()
@@ -65,15 +70,49 @@ func Run(o RunOpts) error {
 }
 
 // RunContext executes an invocation with cancellation. Cancellable stdin source
-// reads require Input.Interrupt; the caller retains IO ownership.
-func RunContext(ctx context.Context, o RunOpts) error {
+// reads require Input.Interrupt or CollectSource; the caller retains IO ownership.
+func RunContext(ctx context.Context, o RunOpts) (resultErr error) {
 	if ctx == nil {
 		return fmt.Errorf("nil invocation context")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	source, err := readSource(ctx, o.ScriptPath, o.Input)
+	if o.Stdout == nil {
+		o.Stdout = os.Stdout
+	}
+	if o.Stderr == nil {
+		o.Stderr = os.Stderr
+	}
+	runtimeOpts := o
+	sourceContext := ctx
+	ctx, report := progress.New(ctx, o.Stderr, o.Quiet)
+	if o.ScriptPath != "-" || sourceContext.Done() != nil || o.Input.Interrupt != nil || o.Input.CollectSource != nil {
+		sourceContext = ctx
+	}
+	// A legacy background stdin read has no interruption authorization. Do not
+	// turn it into a cancellable reader merely by attaching internal reporting.
+	defer func() {
+		if err := report.Finish(); err != nil {
+			resultErr = &StatusError{Code: 1, Err: fmt.Errorf("write output: %w", errors.Join(err, resultErr))}
+		}
+	}()
+	o.Stdout, o.Stderr = report.Synchronize(o.Stdout), report.Writer()
+	if err := progress.Phase(ctx, "reading source"); err != nil {
+		return err
+	}
+	run := func(bin string) error {
+		if err := progress.Phase(ctx, "running script"); err != nil {
+			return err
+		}
+		if err := report.Close(); err != nil {
+			return err
+		}
+		// Direct *os.File streams preserve tty identity. No parent heartbeat
+		// remains to race script output or write from a background tty group.
+		return execCmd(ctx, runtimeOpts, bin)
+	}
+	source, err := readSource(sourceContext, o.ScriptPath, o.Input)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", o.ScriptPath, err)
 	}
@@ -93,7 +132,7 @@ func RunContext(ctx context.Context, o RunOpts) error {
 	if err != nil {
 		// Internal generation failures carry the generated file for debugging.
 		var genErr *script.GenerateError
-		if errors.As(err, &genErr) && genErr.Raw != nil {
+		if o.Verbose && errors.As(err, &genErr) && genErr.Raw != nil {
 			_, _ = fmt.Fprintln(o.Stderr, "--- invalid generated main.go ---")
 			_, _ = fmt.Fprint(o.Stderr, string(genErr.Raw))
 		}
@@ -133,6 +172,9 @@ func RunContext(ctx context.Context, o RunOpts) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := progress.Phase(ctx, "checking build cache"); err != nil {
+		return err
+	}
 
 	cacheRoot, err := cache.Open()
 	if err != nil {
@@ -144,7 +186,7 @@ func RunContext(ctx context.Context, o RunOpts) error {
 			if o.Verbose {
 				_, _ = fmt.Fprintf(o.Stderr, "cache: hit %s\n", appBin)
 			}
-			return execCmd(ctx, o, appBin)
+			return run(appBin)
 		}
 	}
 
@@ -164,7 +206,7 @@ func RunContext(ctx context.Context, o RunOpts) error {
 		}
 	}
 
-	return execCmd(ctx, o, entry.AppPath)
+	return run(entry.AppPath)
 }
 
 func execCmd(ctx context.Context, o RunOpts, appBin string) error {
