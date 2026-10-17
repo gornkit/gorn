@@ -220,8 +220,9 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** build, dependency, and lifecycle contracts
-(06–08). Execution and source identity (04, 09), inspection safety (01), and
+**Next implementation slice:** dependency validation and helper bundling (07, 10),
+following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
+Build identity, lifecycle, and cache ownership follow that dependency contract. Execution and source identity (04, 09), inspection safety (01), and
 source-format work (02–03, 25) are complete. Follow the
 [delivery workflow](v1-next-steps.md) for bounded implementation and validation.
 
@@ -400,8 +401,10 @@ override returns a useful error. Document stdin-source versus runtime-stdin use.
 
 **P1 · Fix · S · Depends: 03, 07, 25 decision**
 
-The authoritative spec permits one preamble directive; the parser accepts
-duplicates. Go/module/version tokens are otherwise largely stored verbatim.
+GORN-V1-25 enforces the single-preamble rule. Remaining work covers
+Go/module/version syntax and duplicate/conflicting requirements, which are
+still largely retained as supplied. The selected validation policy is in the
+[build/runtime contract](../specs/gorn-build-runtime.md).
 Evidence: [directive handling](../../pkg/script/parser.go) and
 [format contract](../specs/gorn-script-format.md).
 
@@ -656,23 +659,29 @@ Implementation model recommendation: **GPT-6.1 Sol (`gpt-6.1-sol`), high reasoni
 | Full `.gorn` language server/debug adapter | Large continuing tooling commitment | Check/format/eject and normal Go tooling leave a measured authoring problem |
 | Task DAGs, watch mode, shell emulation | Changes the product into an orchestrator or language runtime | Separate product research supports that direction |
 
-## Decisions to settle before beta
+## Design decisions and beta validation
 
 The source-format decision (25) is implemented in the
-[authoritative format specification](../specs/gorn-script-format.md). Remaining decisions:
+[authoritative format specification](../specs/gorn-script-format.md). The
+[build/runtime design](../specs/gorn-build-runtime.md) selects dependency, build,
+and process contracts with alternatives and rationale. Implement and verify those
+contracts before beta, then settle the remaining release surface:
 
-1. **Dependency identity (07):** how a script obtains matching `sh`, what must
-   be declared, and whether reproducibility needs a companion artifact.
-2. **Build environment (06):** supported Go floor, inherited settings, target
-   behavior, and cache identity across gorn upgrades and development builds.
-3. **Process behavior (08, 15):** cancellation, process trees, supported shells,
-   login startup defaults, and PowerShell native-command failures.
-4. **Compatibility and distribution (20–21):** public Go packages, supported
-   OS/architecture matrix, install prerequisites, and release policy.
+1. **Dependency identity (07):** implement bundled helper bytes, explicit parent
+   requirements for published helper mode, pinned-graph resolution, and saved
+   module/checksum provenance. Validate offline/private-module behavior.
+2. **Build environment (06):** implement the local installed toolchain, pure-Go
+   host profile, supported flag allowlist, and generator/profile cache identity.
+3. **Process behavior (08, 15):** implement the selected ownership/cancellation,
+   foreground terminal handoff, non-login defaults, and shell status contracts.
+   Verify real POSIX terminals and Windows process behavior.
+4. **Compatibility and distribution (20–21):** select the public package and
+   release target surfaces, installation prerequisites, and release policy before
+   stabilization and publication.
 
-Resolve these in small authoritative specs before implementation spreads their
-assumptions across commands. No broad architecture rewrite is required merely
-to start fixing inspection or source-semantics bugs.
+The design constrains implementation; behavioral verification establishes when
+its backlog items are complete. Release-wide validation remains required even
+when focused implementation tests pass.
 
 ## v1 release gate
 
