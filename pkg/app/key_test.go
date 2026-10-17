@@ -7,12 +7,28 @@ import (
 
 func TestKeyInvalidatesLegacyGeneration(t *testing.T) {
 	path, source := "/task.gorn", []byte("package main;func main(){}")
-	legacy := Key(hashStruct(keyInputs{
-		cacheVersion: 1, goversion: runtime.Version(), sourcePath: path,
-		goos: runtime.GOOS, goarch: runtime.GOARCH, source: source,
-	}))
-	if NewKey(path, source) == legacy {
-		t.Fatal("standard-main generation must not reuse a version-1 cache key")
+	for _, generation := range []byte{1, 2} {
+		legacy := Key(hashStruct(keyInputs{
+			cacheVersion: generation, goversion: runtime.Version(), sourcePath: path,
+			goos: runtime.GOOS, goarch: runtime.GOARCH, source: source,
+		}))
+		if NewKey(path, source) == legacy {
+			t.Fatalf("dependency policy must not reuse a version-%d cache key", generation)
+		}
+	}
+}
+
+func TestBuildIdentityRebinding(t *testing.T) {
+	source, err := New("task.gorn", []byte("package main;func main(){}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := source.WithBuildIdentity("helper:a"), source.WithBuildIdentity("helper:b")
+	if a.Key() == b.Key() || a.Key() == source.Key() {
+		t.Fatal("helper identity did not invalidate build key")
+	}
+	if a.WithBuildIdentity("helper:b").Key() != b.Key() || a.WithBuildIdentity("").Key() != source.Key() {
+		t.Fatal("identity rebinding accumulated previous identity")
 	}
 }
 

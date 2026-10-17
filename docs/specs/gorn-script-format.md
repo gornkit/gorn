@@ -77,8 +77,8 @@ and noncanonical build metadata are rejected before invoking Go.
 Require entries retain their order; repeating a module path is an error even
 when the versions match. Errors identify the repeated line and the first
 declaration line. A concrete requirement is a minimum under Go MVS, not an upper
-bound. Existence, checksum validation, graph resolution, and helper pinning remain
-build/dependency responsibilities; syntax validation requires no Go executable,
+bound. Existence, checksum validation, graph resolution, and helper delivery are
+build responsibilities; syntax validation requires no Go executable,
 network, or writable cache.
 
 Standalone metadata comments after the package clause are errors, including
@@ -135,9 +135,10 @@ Keep-alive declarations are appended after the original source so unused
 ambient packages are accepted and all imports precede declarations. There is no
 rewriting of package references and no source-wide indentation or formatting.
 
-The preamble's `sh` import still uses the current Go dependency-resolution path;
-pinning its version is tracked in GORN-V1-07. The CLI does not import `sh`, and
-`sh` remains a stdlib-only library.
+The preamble's `sh` import defaults to the CLI's bundled production helper source.
+Explicit `sh` imports use that same bundle. A concrete parent-module requirement
+selects the published helper instead. The CLI embeds source as data without
+importing `sh`; `sh` remains a stdlib-only library.
 
 ## Dependencies
 
@@ -163,10 +164,45 @@ func main() {
 }
 ```
 
-Generated modules use the directives and defaults above. Builds currently run
-`go mod tidy` and `go build`; declaring a requirement does not make its package
-ambient. `//gorn:replace`, fragments/includes, and remote source inputs are not
-part of the format.
+Every direct nonstandard import needs a covering requirement (the module path
+itself or a slash-delimited descendant), except bundled `github.com/gornkit/gorn/sh`.
+The selected Go toolchain classifies standard packages at build time. An
+incidental transitive requirement does not authorize a direct import. Missing
+declarations identify the original import line and `//gorn:require` remedy.
+Declaring a requirement does not make its package ambient.
+
+Bundled helper mode generates `require github.com/gornkit/gorn/sh v0.0.0` and
+`replace github.com/gornkit/gorn/sh => ./gorn-runtime`. Builds materialize exact
+production source and its license in that private child module; source imports
+are unchanged. `//gorn:require github.com/gornkit/gorn <concrete-version>` opts
+into the published parent module with no bundle/replacement. Explicit child-module
+requirements are reserved and rejected. A transitive parent module in bundled
+mode fails with a remedy to select the parent explicitly.
+
+Builds download and expand only the declared graph to a fixed point, using Go's
+MVS and checksum validation, then run `go build -mod=readonly -buildvcs=false
+-pgo=off`. They never run `tidy`, `get`, or undeclared latest-version discovery.
+A higher dependency Go minimum fails with a remedy to raise `//gorn:go`; the
+source minimum cannot silently change during resolution. Installed local Go and
+`GOWORK=off` keep workspace/toolchain discovery outside the generated module.
+Nonempty effective `GOFLAGS` is currently rejected before cold/bypass dependency
+resolution; warm-hit profile validation and the supported build-profile allowlist
+are tracked in GORN-V1-06.
+
+Completed builds retain effective `go.mod`, `go.sum`, and `dependencies.json`
+(schema 1: original `declared` requirements, `selected` path/version/Go-minimum
+records, and optional `helper_digest`). Bundled file names and exact bytes feed
+the helper digest and cache identity; generation version 3 invalidates older
+policy output. No companion lock file is required. Warm Gorn hits do not
+redownload modules; cold offline builds need populated Go caches except for
+stdlib/bundled-helper programs. Concrete requirements are minimums under MVS;
+reproducibility still depends on the selected toolchain and Go's trusted caches
+and module sources. See the [build/runtime contract](gorn-build-runtime.md) for
+alternatives, rationale, and remaining profile/lifecycle work.
+
+`//gorn:replace`, fragments/includes, and remote source inputs are not part of
+the format. Private-module settings continue through Go's resolver; credential
+userinfo and URL query values are redacted from returned Go diagnostics.
 
 ## Diagnostics and generation interfaces
 
@@ -187,6 +223,8 @@ Gorn format errors use `*script.LineError`, preserving `errors.Is` and
 | `ErrInvalidMain` | Main lacks a body or has parameters, results, or type parameters |
 | `ErrDirectiveAfterPackage` | Standalone metadata occurs after the package keyword |
 | `ErrInvalidDirective` | Unknown directive or invalid argument count |
+| `ErrInvalidImport` | Invalid Go import path, including relative/local paths |
+| `ErrReservedHelperModule` | Explicit child-module requirement; pin the published parent instead |
 | `ErrInvalidRequire` | Missing path/version pair or invalid/noncanonical concrete module version |
 | `ErrInvalidGoVersion` | Invalid module Go version or unrecognized Go version syntax |
 | `ErrInvalidModule` | Invalid main module path |

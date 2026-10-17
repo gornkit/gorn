@@ -3,8 +3,8 @@ package cache
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/gornkit/gorn/pkg/app"
 	"github.com/gornkit/gorn/pkg/script"
@@ -28,7 +28,7 @@ type Entry struct {
 // already-published, equivalent entry. When noCache is true it bypasses the
 // cache entirely — no manifest, no publish — and hands the temp build dir back
 // to the caller, who must call [Entry.Remove] after running.
-func (r Root) Build(s *app.Source, g *script.Generated, noCache bool) (Entry, error) {
+func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle) (Entry, error) {
 	result := Entry{}
 
 	tmpParent := r.TmpDir()
@@ -58,16 +58,31 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool) (Entry, er
 		return result, err
 	}
 
-	tidy := exec.Command("go", "mod", "tidy")
-	tidy.Dir = buildDir
-	if out, err := tidy.CombinedOutput(); err != nil {
-		return result, fmt.Errorf("go mod tidy: %w\n%s", err, out)
+	if g.BundleHelper {
+		if bundle == nil {
+			return result, fmt.Errorf("bundled helper source is unavailable")
+		}
+		if err := bundle.WriteTo(filepath.Join(buildDir, script.HelperDir)); err != nil {
+			return result, err
+		}
 	}
 
-	build := exec.Command("go", "build", "-o", filepath.Join("bin", binName)) //nolint:gosec // G204: args are gorn-generated, not user input.
-	build.Dir = buildDir
-	if out, err := build.CombinedOutput(); err != nil {
-		return result, fmt.Errorf("go build: %w\n%s", err, out)
+	resolver, err := newResolver(buildDir)
+	if err != nil {
+		return result, err
+	}
+	resolution, err := resolver.resolve(g, bundle)
+	if err != nil {
+		return result, fmt.Errorf("resolve dependencies: %w", err)
+	}
+	if err := resolver.saveResolution(resolution); err != nil {
+		return result, err
+	}
+	if _, err := resolver.command("build", "-mod=readonly", "-buildvcs=false", "-pgo=off", "-o", filepath.Join("bin", binName), "."); err != nil {
+		if strings.Contains(err.Error(), "cannot find module providing package") || strings.Contains(err.Error(), "no required module provides package") || strings.Contains(err.Error(), "missing go.sum entry") {
+			return result, fmt.Errorf("%w\nOnly the declared graph is resolved; add or correct //gorn:require <module> <concrete-version> for the missing dependency", err)
+		}
+		return result, err
 	}
 
 	if noCache {

@@ -220,9 +220,10 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** helper bundling and pinned dependency resolution (07),
+**Next implementation slice:** effective build profile and cache identity (06),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
-Build identity, lifecycle, and cache ownership follow that dependency contract. Execution and source identity (04, 09), inspection safety (01), and
+Dependency resolution/helper delivery (07) and metadata validation (10) are
+implemented. Lifecycle and cache ownership follow build identity. Execution and source identity (04, 09), inspection safety (01), and
 source-format work (02–03, 25) are complete. Follow the
 [delivery workflow](v1-next-steps.md) for bounded implementation and validation.
 
@@ -339,12 +340,22 @@ silently reuse another generator revision's binary.
 
 **P0 · Improvement · L · Depends: none; decision required before 06**
 
-`require` rejects `latest`, but every cold build runs `go mod tidy`, which can
-discover undeclared imports. The preamble imports `github.com/gornkit/gorn/sh`
-without generating a corresponding pinned requirement. Cold rebuilds can
-therefore resolve code not identified by the script's explicit requirements.
-Evidence: [generation](../../pkg/script/generator.go),
-[module template](../../pkg/script/mod.gotmpl), and [build](../../pkg/cache/emit.go).
+**Status: implemented.** Direct nonstandard imports require covering concrete
+declarations. The CLI embeds maintained production `sh` source and license as
+data, materializes a private child module by default, and keys bundled bytes.
+An explicit parent requirement selects the published helper; reserved child
+requirements and mixed transitive-parent graphs fail with remedies.
+
+Go expands only the declared graph to a fixed point and builds readonly, without
+tidy/get/latest discovery or silently raising the source Go minimum. Effective
+module/checksums, original declarations, selected versions, and helper identity
+are saved. No companion lock artifact is required. The [build/runtime design](../specs/gorn-build-runtime.md)
+records alternatives, trade-offs, reproducibility limits, and temporary GOFLAGS
+rejection pending item 06. Evidence: [resolver and file-proxy regressions](../../pkg/cache/resolve_test.go),
+[bundle tests](../../pkg/script/bundle_test.go), and
+[installed-CLI offline cold/warm/bypass tests](../../dependency_integration_test.go).
+Private-proxy transport failures verify URL credential/query redaction. Actual
+toolchain/generator profile identity and lifecycle remain items 06/08.
 
 Acceptance: require concrete direct dependency versions and reject undeclared
 third-party imports with a source-oriented remedy instead of silently selecting
@@ -411,7 +422,7 @@ dependency; `sh` remains stdlib-only.
 The [build/runtime contract](../specs/gorn-build-runtime.md) records the selected
 policy and alternatives. Evidence: [metadata regressions](../../pkg/script/metadata_test.go)
 cover syntax, cardinality, original physical lines, underlying validation causes,
-and operation without Go. Dependency resolution/helper pinning remain item 07.
+and operation without Go. Dependency resolution/helper delivery are recorded in item 07.
 Evidence: [directive handling](../../pkg/script/parser.go) and
 [format contract](../specs/gorn-script-format.md).
 
@@ -674,9 +685,10 @@ The source-format decision (25) is implemented in the
 and process contracts with alternatives and rationale. Implement and verify those
 contracts before beta, then settle the remaining release surface:
 
-1. **Dependency identity (07):** implement bundled helper bytes, explicit parent
+1. **Dependency identity (07):** delivered bundled helper bytes, explicit parent
    requirements for published helper mode, pinned-graph resolution, and saved
-   module/checksum provenance. Validate offline/private-module behavior.
+   module/checksum provenance. Offline/private-proxy regressions are in place;
+   release-wide verification remains part of 18–22.
 2. **Build environment (06):** implement the local installed toolchain, pure-Go
    host profile, supported flag allowlist, and generator/profile cache identity.
 3. **Process behavior (08, 15):** implement the selected ownership/cancellation,

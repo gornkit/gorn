@@ -225,13 +225,16 @@ func generatedModule(t *testing.T, source string) (string, *script.Generated) {
 		t.Fatal(err)
 	}
 	mod := string(g.ModGenerated)
-	if f.UsePreamble {
-		repo, err := filepath.Abs("../..")
+	if g.BundleHelper {
+		bundle, err := script.LoadHelper(os.DirFS("../.."))
 		if err != nil {
 			t.Fatal(err)
 		}
-		mod += "\nrequire github.com/gornkit/gorn v0.0.0\nreplace github.com/gornkit/gorn => " + strconv.Quote(repo) + "\n"
+		if err := bundle.WriteTo(filepath.Join(dir, script.HelperDir)); err != nil {
+			t.Fatal(err)
+		}
 	}
+
 	writeFile(t, filepath.Join(dir, "go.mod"), mod)
 	return dir, g
 }

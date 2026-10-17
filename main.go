@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,9 @@ import (
 	arg "github.com/alexflint/go-arg"
 	"github.com/gornkit/gorn/pkg/cli"
 )
+
+//go:embed sh/command.go sh/doc.go sh/pkg.go sh/process.go sh/result.go sh/shellspec.go LICENSE
+var helperSources embed.FS
 
 var Version = "dev"
 
@@ -154,14 +158,15 @@ func (r *runArgs) Run(common *Common, stdout, stderr io.Writer) error {
 		return err
 	}
 	return cli.Run(cli.RunOpts{
-		Stdout:     stdout,
-		Stderr:     stderr,
-		Verbose:    common.Verbose,
-		PrintMod:   r.PrintMod,
-		PrintMain:  r.PrintMain,
-		NoCache:    r.NoCache,
-		ScriptPath: script,
-		Args:       r.Args,
+		Stdout:        stdout,
+		HelperSources: helperSources,
+		Stderr:        stderr,
+		Verbose:       common.Verbose,
+		PrintMod:      r.PrintMod,
+		PrintMain:     r.PrintMain,
+		NoCache:       r.NoCache,
+		ScriptPath:    script,
+		Args:          r.Args,
 	})
 }
 

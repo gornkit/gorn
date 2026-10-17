@@ -2,6 +2,8 @@ package app
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -29,10 +31,11 @@ const maxSlugLen = 64
 // Source is a validated gorn script: its resolved path, raw bytes, and the
 // content-derived cache key. Construct one with New.
 type Source struct {
-	path   string
-	data   []byte
-	appKey Key
-	slug   string
+	path      string
+	data      []byte
+	appKey    Key
+	sourceKey Key
+	slug      string
 }
 
 // New validates path and data and returns a Source with its Key and Slug
@@ -60,11 +63,13 @@ func New(path string, data []byte) (*Source, error) {
 		identity = "stdin\x00" + path
 	}
 
+	key := NewKey(identity, data)
 	return &Source{
-		path:   path,
-		data:   bytes.Clone(data),
-		appKey: NewKey(identity, data),
-		slug:   makeSlug(path),
+		sourceKey: key,
+		path:      path,
+		data:      bytes.Clone(data),
+		appKey:    key,
+		slug:      makeSlug(path),
 	}, nil
 }
 
@@ -76,6 +81,18 @@ func (s *Source) Data() []byte { return bytes.Clone(s.data) }
 
 // Key returns the content-derived cache key.
 func (s *Source) Key() Key { return s.appKey }
+
+// WithBuildIdentity returns a source sharing immutable bytes with a build key
+// bound to the supplied dependency/profile identity. Rebinding is deterministic.
+func (s *Source) WithBuildIdentity(identity string) *Source {
+	clone := *s
+	clone.appKey = clone.sourceKey
+	if identity != "" {
+		sum := sha256.Sum256([]byte(string(clone.sourceKey) + "\x00" + identity))
+		clone.appKey = Key(hex.EncodeToString(sum[:]))
+	}
+	return &clone
+}
 
 // Slug returns a filesystem-safe, human-readable label derived from the script
 // name (its base without the .gorn extension), for use as a cosmetic suffix on
