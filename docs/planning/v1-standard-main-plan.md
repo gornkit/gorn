@@ -3,25 +3,24 @@ title: Standard Go Source Format Implementation Record
 status: authoritative
 type: plan
 updated: 2026-10-17
-summary: Approved GORN-V1-25 contract, implementation boundaries, and local validation evidence for source-authored Go main files.
+summary: Implemented GORN-V1-25 source-format contract, scope boundaries, and verification evidence.
 ---
 
 # GORN-V1-25: standard Go source format
 
-## Approval and delivery status
+## Outcome
 
-The user approved this bounded implementation on 2026-10-17 after planning.
-Source formatting is preserved, and no migration tooling or dedicated legacy
-errors are required. Work is on `codex/standard-main`, based on planning commit
-`796fda2`. The user approved the implementation and a local commit, including
-the added `testdata/require.gorn` example. Push and PR delivery remain pending.
-The [backlog](v1-backlog.md) and [delivery workflow](v1-next-steps.md)
-remain the roadmap and delivery process.
+GORN-V1-25 implements a complete Go source file with a source-authored
+`package main` and `func main()`. Generation preserves source formatting and
+literal contents while retaining optional shebangs, header metadata, and preamble
+imports. The authoritative contract is the
+[format specification](../specs/gorn-script-format.md).
 
-Implementation model recommendation: GPT-6.1 Sol (`gpt-6.1-sol`), high reasoning,
-with independent review focused on source preservation and diagnostic mapping.
+This record captures the implemented scope and verification evidence for 25 and
+the related fixes in 02–03. The [backlog](v1-backlog.md) tracks remaining v1 work;
+the [delivery workflow](v1-next-steps.md) describes how to prepare each slice.
 
-## Approved implementation contract
+## Implemented contract
 
 - Require `package main` and exactly one package-level `func main()` with a body,
   no parameters, no results, and no type parameters. Empty main and helpers on
@@ -48,11 +47,12 @@ The CLI commands, `.gorn` extension, dependencies, and public `sh` library are
 unchanged. The CLI still does not import `sh`, and `sh` remains stdlib-only.
 Archived documentation stays frozen. Warm-cache inspection, exit status,
 cancellation, corruption repair, helper pinning, and broader build identity remain
-separate backlog items. Push requires separate user approval.
+separate backlog items.
 
 ## Verification
 
-Focused local checks pass for the parser, generator, key, and CLI packages:
+Verification recorded on 2026-10-17 used Linux and mise-pinned Go 1.26.4.
+Focused checks covered the parser, generator, key, and CLI packages:
 
 ```sh
 mise exec -- go test -count=1 ./pkg/script ./pkg/app .
@@ -64,10 +64,10 @@ comments attached to imports/helpers, compact forms, preamble compilation,
 compiler line/column diagnostics, documentation-example compilation, generation
 version invalidation, and real cold/warm/bypass runs with arguments and stdin.
 
-The default temporary-directory environment has invalid `.git` markers at its
-roots. Go discovers those markers, while Git rejects them; generated-module
-builds therefore fail to obtain VCS status. This was reproduced on the unchanged
-baseline. Tests run with TMPDIR pointing inside a private valid Git fixture pass
+The validation host had invalid `.git` markers at its default temporary-directory
+roots. Go discovered those markers, while Git rejected them; generated-module
+builds failed to obtain VCS status. This was reproduced on the unchanged
+baseline. Tests passed with TMPDIR pointing inside a private valid Git fixture
 without disabling VCS stamping. The fixture is created outside the repository
 and removed afterward; no global Go or Git setting changes are needed.
 
@@ -75,7 +75,7 @@ The full `mise run test` gate passed with that isolated TMPDIR: lint reported
 zero issues, the stamped CLI built, and all package tests passed. Dependency-graph
 checks using `go list -deps -json` verified stdlib-only `sh` and no root/`pkg/`
 dependency on `sh`. Documentation links/frontmatter and `git diff --check` passed.
-The added `testdata/require.gorn` example also built and ran with the local module
+The `testdata/require.gorn` example also built and ran with the local module
 replacement used for preamble verification, printing `hello, Gorn`.
 
 Independent review found one issue: preamble insertion could promote a trailing
@@ -85,6 +85,5 @@ both implicit and explicit semicolons. The reviewer verified the correction
 across 18 separator/comment variants, including CRLF and multiline comments, and
 reported no further confirmed source-preservation or mapping issues.
 
-These are local Linux results. Hosted cross-platform CI has not been run; the
-implementation has user review approval for a local commit. Push and PR delivery
-remain pending.
+This evidence covers Linux validation. Cross-platform installed-CLI coverage and
+published dependency resolution remain release requirements under 18 and 21.

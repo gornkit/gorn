@@ -20,10 +20,10 @@ API**. Add exact-argument process execution to that API. Keep the file format
 small and use ordinary Go modules and standard library IO. Fragments, a pipeline
 DSL, a filesystem utility suite, and a full language server can wait.
 
-Items remain proposed unless their status explicitly records approval or
-implementation. GORN-V1-25 and the related source-preservation work in 02–03
-are approved and implemented locally; delivery to main is still pending. Other
-items do not authorize implementation, publication, or archive changes.
+GORN-V1-25 and the related source-preservation and directive fixes in 02–03
+are implemented, with linked verification evidence. Other items remain proposed
+unless their status records implementation. The backlog defines scope and
+acceptance criteria; it does not authorize implementation or publication.
 
 See [next steps and delivery workflow](v1-next-steps.md) for the recommended
 implementation sequence, Plan/Goal handoff, and worktree/PR process.
@@ -62,13 +62,12 @@ observe a first install, a first dependency-bearing script, a CI invocation,
 and a cold versus warm rerun. Treat recurring failures as evidence for priority
 changes, rather than adding features from the historical designs by default.
 
-## Approved format change: ordinary Go entry point
+## Source format decision: ordinary Go entry point
 
-**Approved and implemented locally, 2026-10-17:** replace `//gorn:main` and the generated
-main wrapper with a source-authored `func main()` and require `package main`.
-Retain module/version/require directives as header comments. The current contract
-is in the [format specification](../specs/gorn-script-format.md); the approved
-plan and validation record are in [the implementation record](v1-standard-main-plan.md).
+**Implemented in GORN-V1-25:** scripts require a source-authored `package main`
+and `func main()`. Module/version/require directives remain header comments.
+The [format specification](../specs/gorn-script-format.md) defines the contract;
+the [implementation record](v1-standard-main-plan.md) captures scope and verification.
 
 ```go
 //gorn:go 1.26
@@ -87,21 +86,21 @@ func greet(name string) {
 
 The main product benefit is a familiar source model: imports and declarations
 follow Go rules, helpers can precede or follow `main`, and gorn no longer needs
-to split a file into declarations and executable statements. Helpers already
-work above today's divider; this proposal removes that special ordering rule
-rather than introducing functions for the first time.
+to split a file into declarations and executable statements. The previous format
+allowed helpers only before its divider; the standard format removes that
+ordering constraint.
 
 | Choice | Assessment |
 | --- | --- |
 | Keep `//gorn:main` | Smallest tiny-script form, but retains a custom split, wrapper generation, and source semantics/mapping work |
 | Require `func main()` and inject `package main` | Removes the divider, but the original source still lacks Go's required package clause |
-| Require `package main` and `func main()` | Recommended: a little more source text buys a complete Go file model and simpler generation |
+| Require `package main` and `func main()` | Selected: a little more source text buys a complete Go file model and simpler generation |
 
 Go's [source-file grammar](https://go.dev/ref/spec#Source_file_organization)
 requires a package clause; its [program entry-point contract](https://go.dev/ref/spec#Program_execution)
-requires `main` in package `main`, with no arguments or results. Use Go's parser
-and compiler rather than detecting functions with text matching. Empty
-`func main() {}` is valid; the old empty-main-section rule should disappear.
+requires `main` in package `main`, with no arguments or results. Gorn uses Go's
+parser for format validation and leaves remaining semantic checks to the
+compiler. Empty `func main() {}` is valid.
 
 The expected tooling improvement has limits:
 
@@ -109,26 +108,25 @@ The expected tooling improvement has limits:
   it. A standard main alone does not establish out-of-the-box gopls support.
   `.go` input/discovery is a separate decision; do not rename every script as
   part of this change without considering normal Go package discovery.
-- A shebang is still outside Go syntax. Gorn can preserve support by replacing
-  its first line with a blank line before Go parsing, retaining source numbering.
+- A shebang is still outside Go syntax. Gorn replaces its first-line characters
+  with whitespace before Go parsing, retaining offsets and source numbering.
   Direct Go formatting of a shebang-bearing file still needs preprocessing.
-- Keep the optional preamble for this format change, with explicit imports as the
-  preferred examples. Ambient imports still require generated source for full
+- The optional preamble is retained, with explicit imports as the preferred
+  examples. Ambient imports still require generated source for full
   name resolution. Removing the preamble is a separate decision.
-- If the preamble remains, inject its imports into the same generated file
-  after the package clause; a companion file cannot supply imported package
-  names to the script. Preserve original source mappings around inserted code
-  and leave all imports before generated keep-alive declarations. Imports have
+- Preamble imports are injected into the same generated file after the package
+  clause; a companion file cannot supply imported package names to the script.
+  Original source mappings resume after inserted code, and all imports precede
+  generated keep-alive declarations. Imports have
   [file scope](https://go.dev/ref/spec#Declarations_and_scope).
 
 Gorn's value remains single-file dependency declarations, generated module
 management, cached execution, and binary export. It need not replace Go's entry
 point syntax to provide those benefits.
 
-Given the pre-alpha status, prefer one documented format break before v1 over
-permanent support for both grammars. No migration tooling or dedicated legacy
-diagnostics are required. Bump generation/cache identity so old cached binaries
-cannot bypass the new contract.
+The pre-alpha format break replaces the legacy grammar without migration
+tooling or dedicated legacy diagnostics. Generation/cache identity advances to
+version 2 so old cached binaries cannot bypass the new contract.
 
 The format change is tracked as **25**, with the relevant 02–03 fixes delivered
 by removing wrapping/indentation and using Go comment tokens for header metadata.
@@ -138,15 +136,14 @@ remains frozen.
 
 Implementation recommendation: **GPT-6.1 Sol (`gpt-6.1-sol`), high reasoning**,
 with independent high-reasoning review of literal preservation, preamble import
-insertion, and source mapping. Approval covers the bounded format implementation;
-commit and push still require separate user approval.
+insertion, and source mapping.
 
-## Current state
+## Assessment baseline
 
 Assessed checkout: `d045bebd9f57646a5d8624ee97005b4414e97a99`, 2026-10-16.
-The worktree was clean before this assessment. Findings below are from the local
-code, documentation, tests, and bounded probes; hosted CI and release state were
-not queried.
+This snapshot records the code, documentation, tests, and bounded probes before
+GORN-V1-25. Item statuses and the implementation record describe subsequent
+changes. Hosted CI and release state were outside the assessment.
 
 | Area | What works | Gap before v1 |
 | --- | --- | --- |
@@ -169,7 +166,7 @@ not a growing result container. Root `package main` remains the installable CLI.
 - `TestGeneratePreambleOutputCompiles` failed with
   `error obtaining VCS status: exit status 128`. A focused rerun with
   `GOFLAGS=-buildvcs=false` passed. This isolates a VCS-stamping interaction in
-  this environment; the unmodified full gate is still failing. Do not treat
+  the assessment environment; the unmodified full gate failed there. Do not treat
   the override as a release fix or infer that hosted CI is failing.
 - Isolated probes reproduced warm-cache inspection executing the script,
   lost child exit status, failed cache repair, altered raw strings, and
@@ -199,7 +196,7 @@ Sizes are not calendar estimates. All dependencies below refer to item IDs.
 
 | Milestone | Outcome | Items |
 | --- | --- | --- |
-| M0: Format decision | Review standard main/package proposal before investing in the legacy split | 25; inspection fix 01 can proceed independently |
+| M0: Standard source format | Complete: source-authored package/main, preserved source, Go-aware metadata | 25, with 02–03 |
 | M1: Correct execution | Go semantics, inspection, source identity, and failures are reliable | 01–04, 09; start 18 immediately |
 | M2: Predictable builds | Build identity, dependency policy, repair, cancellation, validation, and progress work together | 05–08, 10–11 |
 | M3: Complete core workflows | Export binaries, manage cache, execute exact argv, document supported shells | 12–15 |
@@ -223,10 +220,9 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Current checkpoint:** 25 and the related 02–03 fixes are locally validated
-and approved for a local commit, pending push and PR delivery. Inspection
-safety (01) is the next independent correctness slice. Follow the
-[delivery workflow](v1-next-steps.md); each commit and push requires user approval.
+**Next implementation slice:** inspection safety (01). Source-format work in 25
+and the related 02–03 fixes is complete. Follow the
+[delivery workflow](v1-next-steps.md) for bounded implementation and validation.
 
 ### GORN-V1-01 — Make inspection incapable of executing a script
 
@@ -245,7 +241,7 @@ cache or an installed Go executable and reports output-write errors.
 
 **P0 · Fix · M · Depends: 25 decision**
 
-**Status: implemented locally through 25; delivery pending.** The original
+**Status: implemented through 25.** The original
 wrapper altered multiline raw-string values by indenting every body line. The
 wrapper and indentation helper are removed. Generation now preserves source
 text and uses source anchors around inserted preamble code.
@@ -259,7 +255,7 @@ formatting, and equivalence with ordinary Go, including original source location
 
 **P0 · Fix · M · Depends: 25 decision**
 
-**Status: implemented locally through 25; delivery pending.** The original
+**Status: implemented through 25.** The original
 line-based parser mistook directive-looking literal/comment contents for metadata.
 The parser now uses actual Go comment tokens and accepts standalone metadata only
 in the header before the package clause.
@@ -501,11 +497,13 @@ assets and any provenance files. Multi-file includes are unnecessary.
 
 **P1 · Validation · L · Depends: start now; complete after 01–15**
 
-Current CLI success tests largely use print flags, cache tests stage fake
-binaries, and one generator test compiles via a local module replacement. These
-do not exercise the production run/build path end to end.
-Evidence: [CLI tests](../../main_test.go), [cache tests](../../pkg/cache/cache_test.go),
-and [generator build test](../../pkg/script/generator_test.go).
+GORN-V1-25 adds real CLI cold/warm/bypass execution, stdin, arguments, IO,
+and cold inspection coverage. Generator tests compile plain, preamble, and
+documentation examples using a local module replacement where needed.
+Installed-CLI and cross-platform coverage of the remaining workflows is still
+required. Evidence: [execution tests](../../run_integration_test.go),
+[CLI tests](../../main_test.go), [cache tests](../../pkg/cache/cache_test.go),
+and [generator tests](../../pkg/script/generator_test.go).
 
 Acceptance: use a built CLI in isolated directories for plain, preamble, and
 explicit dependency scripts. Cover cold/warm/bypass, stdin, args, IO, status,
@@ -521,8 +519,9 @@ passing without requiring a developer's global `GOFLAGS` override.
 **P1 · Improvement · M · Depends: 07, 12, 14–15, 18**
 
 The README provides contributor setup but no complete end-user install/start
-flow. Authoritative format examples call `sh.Glob` and `sh.MustRead`, which do
-not exist. Fix those examples using current APIs or the standard library.
+flow. GORN-V1-25 replaces obsolete helper calls in the authoritative format
+examples with existing APIs or standard-library code and compile-checks those
+examples. Complete the end-user onboarding and workflow documentation below.
 Evidence: [README](../../README.md) and [format examples](../specs/gorn-script-format.md).
 
 Acceptance: install instructions, Go/PATH prerequisites, a working first script,
@@ -586,7 +585,7 @@ dependency downloads. Optimize measured bottlenecks and retain integrity guarant
 
 Consider `gorn fmt` with write and check-only modes after source-preservation
 work is solid. Preserve shebang/directives and use Go's formatter for the chosen
-source model. If 25 is adopted, format one ordinary Go unit without section splitting.
+source model: one ordinary Go unit without section splitting.
 
 Acceptance: formatting is idempotent, preserves comments and literal values,
 does not execute scripts, and produces useful check-mode failures in CI.
@@ -608,14 +607,15 @@ the script. Do not add a registry or independent dependency solver.
 
 **P1 · Architecture/feature · M · Depends: none; decision before 02–03**
 
-**Status: implemented and approved for a local commit; delivery to main pending.**
+**Status: implemented.**
 
 The source-authored `package main` and `func main()` contract, optional shebang
 and preamble, source-preserving generation, and key-version invalidation are
 implemented. The wrapper template and section representation are removed.
 
-The [approved plan and verification record](v1-standard-main-plan.md) records
-acceptance coverage, validation commands, environment handling, and review status.
+The [implementation record](v1-standard-main-plan.md) records acceptance
+coverage, validation commands, environment handling, and the source-preservation
+review correction.
 No migration tooling, dedicated legacy diagnostics, dual grammar, or automatic
 extension change was introduced. Full build identity, dependency pinning, and
 other runner fixes remain separate backlog items.
@@ -636,15 +636,16 @@ Implementation model recommendation: **GPT-6.1 Sol (`gpt-6.1-sol`), high reasoni
 
 ## Decisions to settle before beta
 
-1. **Source format (25):** approved and implemented locally; verify and land the
-   standard-main contract before continuing dependent work.
-2. **Dependency identity (07):** how a script obtains matching `sh`, what must
+The source-format decision (25) is implemented in the
+[authoritative format specification](../specs/gorn-script-format.md). Remaining decisions:
+
+1. **Dependency identity (07):** how a script obtains matching `sh`, what must
    be declared, and whether reproducibility needs a companion artifact.
-3. **Build environment (06):** supported Go floor, inherited settings, target
+2. **Build environment (06):** supported Go floor, inherited settings, target
    behavior, and cache identity across gorn upgrades and development builds.
-4. **Process behavior (08, 15):** cancellation, process trees, supported shells,
+3. **Process behavior (08, 15):** cancellation, process trees, supported shells,
    login startup defaults, and PowerShell native-command failures.
-5. **Compatibility and distribution (20–21):** public Go packages, supported
+4. **Compatibility and distribution (20–21):** public Go packages, supported
    OS/architecture matrix, install prerequisites, and release policy.
 
 Resolve these in small authoritative specs before implementation spreads their
