@@ -208,6 +208,9 @@ userinfo and URL query values are redacted from returned Go diagnostics.
 
 ## Diagnostics and generation interfaces
 
+The following parser/generator interfaces describe private implementation under
+`internal/`, not a supported Go SDK; see the [compatibility boundary](gorn-compatibility.md).
+
 `script.Parse` accepts an `app.Source` and returns a `script.File` containing
 metadata and the complete normalized `Content`. Its private syntax and position
 information belong to that content; callers must not modify `Content` after

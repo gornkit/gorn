@@ -40,7 +40,7 @@ found a shorthand `--version`/`--help` parity gap; both parsers now handle those
 flags consistently, with installed-CLI regressions.
 
 Evidence: [installed-CLI tests](../../execution_integration_test.go),
-[source identity tests](../../pkg/app/source_test.go), and
-[cache-location tests](../../pkg/cache/cache_test.go). Cancellation and process
+[source identity tests](../../internal/app/source_test.go), and
+[cache-location tests](../../internal/cache/cache_test.go). Cancellation and process
 ownership remain the separate contract in 08; this slice defines child status
 propagation rather than the runner's response to receiving a signal.

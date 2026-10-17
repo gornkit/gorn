@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gornkit/gorn/pkg/cache"
+	"github.com/gornkit/gorn/internal/cache"
 )
 
 func TestInstalledCacheReadOnlyCommandsWithoutGo(t *testing.T) {

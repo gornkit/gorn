@@ -5,9 +5,9 @@ Go module `github.com/gornkit/gorn`. Tagline: "Go file apps you can run right no
 ## Layout
 
 - Root `package main` → `go install github.com/gornkit/gorn` installs the CLI as `gorn`.
-- `pkg/` → the CLI's internal packages (not importable via the root): `script` (parse `.gorn` + generate `go.mod`/`main.go`), `app` (validated script `Source`, content-hash cache `Key`, dir slug), `cache` (build cache `Root`, `Root.Build` build/publish, manifest), `cli` (`Run`/`Build`/`Cache` orchestration; `build`/`cache` subcommand stubs).
-- `sh/` → library package, imported as `github.com/gornkit/gorn/sh`. Current v0 is shell-exec only: `Host()/Bash()/Zsh()/Sh()/CmdExe()/Pwsh()`, `Setup()/Strict()/Shell()/Exec()`, command IO/env/dir, process `Wait()/Kill()`, and status-only `Result`.
-- The root is not importable as a library; consumers import subpackages.
+- `internal/` → implementation packages protected by Go's internal-import boundary: `script` (parse `.gorn` + generate `go.mod`/`main.go`), `app` (validated script `Source`, content-hash cache `Key`, dir slug), `cache` (build cache `Root`, `Root.Build` build/publish, manifest), `cli` (`Run`/`Build`/`Cache` orchestration), `buildprofile` (frozen build identity), `process` (owned process lifecycle), and `progress` (stderr phases/heartbeats).
+- `sh/` → library package, imported as `github.com/gornkit/gorn/sh`. The supported library includes exact `Cmd(name, args...)`, `.Context(ctx)`, and shell execution: `Host()/Bash()/Zsh()/Sh()/CmdExe()/Pwsh()`, `Setup()/Strict()/Shell()/Exec()`, command IO/env/dir, process `Wait()/Kill()`, and status-only `Result`.
+- The root is not importable as a library; external consumers import `sh`. See `docs/specs/gorn-compatibility.md` for the public/private boundary.
 - `docs/archive/` holds historical/reference design docs. They are useful context, but the implementation and root docs are authoritative when they diverge.
 
 ## Toolchain
@@ -35,7 +35,7 @@ Mise tasks are inline in `.config/mise.toml`. If you add more, either keep them 
 - Module path is `github.com/gornkit/gorn`; use it for internal imports.
 - CLI parsing uses `github.com/alexflint/go-arg`; otherwise prefer stdlib. Adding another dep needs justification.
 - **Invariant: the `sh` package must remain stdlib-only** — no third-party dependencies. Generated scripts and external users import `sh`, so its dependency graph must stay clean and it must be self-contained (also enables writing a local copy for generated modules).
-- **Invariant: the CLI (root/`pkg/`) must not import `sh`.** They are independent; the CLI only references `sh` by import-path string when generating scripts. Keep them decoupled.
+- **Invariant: the CLI (root/`internal/`) must not import `sh`.** They are independent; the CLI only references `sh` by import-path string when generating scripts. Keep them decoupled.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc.). Prefer a single commit per logical change over splitting scaffolding into many small ones.
 - User style (`@trippwill`): buildable commits, small reviewable slices, no
   half-baked feature branches pushed. Pushing requires explicit sign-off.
