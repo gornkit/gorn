@@ -4,6 +4,7 @@ package buildprofile
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
@@ -16,6 +17,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/gornkit/gorn/pkg/process"
 )
 
 // Record is safe to write as provenance. Linker values and resolver settings
@@ -70,14 +73,14 @@ func digest(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func digestFile(path string) (string, error) {
+func digestFile(ctx context.Context, path string) (string, error) {
 	f, err := os.Open(path) //nolint:gosec // G304: selected installed toolchain or executing CLI path.
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = f.Close() }()
 	hash := sha256.New()
-	if _, err := io.Copy(hash, f); err != nil {
+	if _, err := io.Copy(hash, contextReader{ctx, f}); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
@@ -89,6 +92,10 @@ var capturedSettings = []string{
 }
 
 func queryGo(path string, env []string) (map[string]string, error) {
+	return queryGoContext(context.Background(), path, env)
+}
+
+func queryGoContext(ctx context.Context, path string, env []string) (map[string]string, error) {
 	// Query stable settings explicitly. The all-settings form also requests
 	// unrelated costly compiler information such as GOGCCFLAGS.
 	args := append([]string{"env", "-json", "GOENV", "GOVERSION", "GOFLAGS", "GOEXPERIMENT", "GOFIPS140", "GOCACHEPROG"}, capturedSettings...)
@@ -96,7 +103,7 @@ func queryGo(path string, env []string) (map[string]string, error) {
 	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := process.Run(ctx, cmd); err != nil {
 		// Discovery can encounter malformed private settings. Do not dump raw
 		// configuration; the preserved cause still distinguishes exec failures.
 		return nil, fmt.Errorf("discover installed Go configuration: %w", err)
@@ -158,6 +165,17 @@ func configured(values map[string]string, env []string) (map[string]string, erro
 // Discover selects the installed SDK (including through a tool-manager launcher),
 // then executes that SDK directly. It performs no module downloads or builds.
 func Discover(sourceGo, helperDigest string) (*Profile, error) {
+	return DiscoverContext(context.Background(), sourceGo, helperDigest)
+}
+
+// DiscoverContext is Discover with cancellation of discovery subprocesses and hashing.
+func DiscoverContext(ctx context.Context, sourceGo, helperDigest string) (*Profile, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("nil discovery context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	launcher, err := exec.LookPath("go")
 	if err != nil {
 		return nil, fmt.Errorf("discover Go: %w", err)
@@ -168,7 +186,7 @@ func Discover(sourceGo, helperDigest string) (*Profile, error) {
 	}
 	base := os.Environ()
 	probe := setEnv(setEnv(setEnv(setEnv(base, "GOTOOLCHAIN", "local"), "GOWORK", "off"), "GO111MODULE", "on"), "GOFLAGS", " ")
-	values, err := queryGo(launcher, probe)
+	values, err := queryGoContext(ctx, launcher, probe)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +234,7 @@ func Discover(sourceGo, helperDigest string) (*Profile, error) {
 	if err != nil || info.Path != "cmd/go" {
 		return nil, fmt.Errorf("selected GOROOT must contain an installed Go executable")
 	}
-	goSHA, err := digestFile(goPath)
+	goSHA, err := digestFile(ctx, goPath)
 	if err != nil {
 		return nil, fmt.Errorf("hash selected Go executable: %w", err)
 	}
@@ -224,7 +242,7 @@ func Discover(sourceGo, helperDigest string) (*Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	generatorSHA, err := digestFile(generator)
+	generatorSHA, err := digestFile(ctx, generator)
 	if err != nil {
 		return nil, fmt.Errorf("hash executing gorn: %w", err)
 	}
@@ -243,7 +261,7 @@ func Discover(sourceGo, helperDigest string) (*Profile, error) {
 	} {
 		env = setEnv(env, name, value)
 	}
-	actual, err := queryGo(goPath, env)
+	actual, err := queryGoContext(ctx, goPath, env)
 	if err != nil {
 		return nil, err
 	}
@@ -305,4 +323,16 @@ func validateSettings(values, explicit map[string]string) error {
 		}
 	}
 	return nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
 }

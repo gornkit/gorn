@@ -1,19 +1,22 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"slices"
 	"strings"
+	"syscall"
 
 	arg "github.com/alexflint/go-arg"
 	"github.com/gornkit/gorn/pkg/cli"
 )
 
-//go:embed sh/command.go sh/doc.go sh/pkg.go sh/process.go sh/result.go sh/shellspec.go LICENSE
+//go:embed sh/command.go sh/doc.go sh/pkg.go sh/process.go sh/process_core.go sh/process_posix.go sh/process_linux.go sh/process_darwin.go sh/process_windows.go sh/process_unsupported.go sh/process_marker.go sh/result.go sh/shellspec.go LICENSE
 var helperSources embed.FS
 
 var Version = "dev"
@@ -22,6 +25,8 @@ var subcommandNames = []string{"run", "build", "cache"}
 
 type Common struct {
 	Verbose bool `arg:"-v,--verbose" help:"Enable verbose diagnostics on stderr"`
+	ctx     context.Context
+	input   cli.Input
 }
 
 type runArgs struct {
@@ -57,18 +62,81 @@ func (CLI) Version() string {
 }
 
 func main() {
-	if err := RunCLI(os.Args[1:], os.Stdout, os.Stderr, os.Exit); err != nil {
+	os.Exit(mainExitCode())
+}
+
+func mainExitCode() int {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(interrupts)
+	go func() {
+		select {
+		case sig := <-interrupts:
+			code := 130
+			if sig == syscall.SIGTERM {
+				code = 143
+			}
+			cancel(&cli.StatusError{Code: code, Err: context.Canceled, Silent: true})
+		case <-ctx.Done():
+		}
+	}()
+	err := RunCLIContext(ctx, os.Args[1:], cli.Input{Reader: os.Stdin, CollectSource: collectRootSource}, os.Stdout, os.Stderr, os.Exit)
+	if ctx.Err() != nil {
+		err = errors.Join(context.Cause(ctx), err)
+	}
+	if err != nil {
 		var status *cli.StatusError
 		if !errors.As(err, &status) || !status.Silent {
 			fmt.Fprintf(os.Stderr, "gorn: error: %v\n", err)
 		}
-		os.Exit(cli.ExitStatus(err))
+		return cli.ExitStatus(err)
+	}
+	return 0
+}
+
+// collectRootSource belongs only to the exit-on-cancellation root process.
+// Inherited blocking stdin cannot reliably be interrupted by os.File.Close.
+// Cancellation happens before any cache/build/runtime resource is acquired;
+// main exits immediately and the OS retires this otherwise blocked read thread.
+// Embedding entry points must use their explicit interrupt/join ownership path.
+func collectRootSource(ctx context.Context) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	type result struct {
+		data []byte
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() { data, err := io.ReadAll(os.Stdin); done <- result{data, err} }()
+	select {
+	case got := <-done:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return got.data, got.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
 func RunCLI(args []string, stdout, stderr io.Writer, exit func(int)) error {
+	return RunCLIContext(context.Background(), args, cli.Input{Reader: os.Stdin}, stdout, stderr, exit)
+}
+
+// RunCLIContext embeds CLI dispatch with explicit source-input interruption.
+// It installs no process-global signal handlers and never closes caller IO.
+func RunCLIContext(ctx context.Context, args []string, input cli.Input, stdout, stderr io.Writer, exit func(int)) error {
+	if ctx == nil {
+		return fmt.Errorf("nil CLI context")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	var cli CLI
-	var cmn Common
+	cmn := Common{ctx: ctx, input: input}
 
 	parser, err := newParser(stdout, exit, &cli, &cmn)
 	if err != nil {
@@ -157,7 +225,12 @@ func (r *runArgs) Run(common *Common, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return cli.Run(cli.RunOpts{
+	ctx := common.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return cli.RunContext(ctx, cli.RunOpts{
+		Input:         common.input,
 		Stdout:        stdout,
 		HelperSources: helperSources,
 		Stderr:        stderr,

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,7 +31,18 @@ type Entry struct {
 // cache entirely — no manifest, no publish — and hands the temp build dir back
 // to the caller, who must call [Entry.Remove] after running.
 func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle, profile *buildprofile.Profile) (Entry, error) {
+	return r.BuildContext(context.Background(), s, g, noCache, bundle, profile)
+}
+
+// BuildContext cancels resolver/build children and removes unpublished staging.
+func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle, profile *buildprofile.Profile) (Entry, error) {
 	result := Entry{}
+	if ctx == nil {
+		return result, fmt.Errorf("nil build context")
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	if profile == nil || s.BuildIdentity() != profile.Identity() {
 		return result, fmt.Errorf("source must be bound to the selected build profile")
 	}
@@ -72,6 +84,7 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *sc
 	}
 
 	resolver := newResolver(buildDir, profile)
+	resolver.ctx = ctx
 	resolution, err := resolver.resolve(g, bundle)
 	if err != nil {
 		return result, fmt.Errorf("resolve dependencies: %w", err)
@@ -86,6 +99,9 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *sc
 		return result, err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	if noCache {
 		// Bypass: run straight from the temp dir; caller calls Entry.Remove.
 		handoff = true
@@ -106,6 +122,9 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *sc
 		return result, err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	if err := r.publish(buildDir, s); err != nil {
 		return result, err
 	}

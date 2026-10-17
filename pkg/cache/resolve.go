@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/gornkit/gorn/pkg/buildprofile"
+	"github.com/gornkit/gorn/pkg/process"
 	"github.com/gornkit/gorn/pkg/script"
 	"golang.org/x/mod/modfile"
 )
@@ -42,12 +44,13 @@ type moduleInfo struct {
 }
 
 type resolver struct {
+	ctx         context.Context
 	dir, goPath string
 	env         []string
 }
 
 func newResolver(dir string, profile *buildprofile.Profile) *resolver {
-	return &resolver{dir: dir, goPath: profile.GoPath(), env: profile.Environment()}
+	return &resolver{ctx: context.Background(), dir: dir, goPath: profile.GoPath(), env: profile.Environment()}
 }
 
 func (r *resolver) command(args ...string) ([]byte, error) {
@@ -55,7 +58,7 @@ func (r *resolver) command(args ...string) ([]byte, error) {
 	cmd.Dir, cmd.Env = r.dir, r.env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := process.Run(r.ctx, cmd); err != nil {
 		// Build flags can contain private -X values. Only the phase is public.
 		phase := args[0]
 		if phase == "mod" && len(args) > 1 {

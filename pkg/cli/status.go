@@ -34,7 +34,7 @@ func ExitStatus(err error) int {
 func scriptError(err error) error {
 	var exited *exec.ExitError
 	if !errors.As(err, &exited) {
-		return fmt.Errorf("start script: %w", err)
+		return fmt.Errorf("execute script: %w", err)
 	}
 	code := exited.ExitCode()
 	if code < 0 {

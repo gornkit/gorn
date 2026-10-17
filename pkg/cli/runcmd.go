@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,14 +10,15 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/gornkit/gorn/pkg/app"
 	"github.com/gornkit/gorn/pkg/buildprofile"
 	"github.com/gornkit/gorn/pkg/cache"
+	"github.com/gornkit/gorn/pkg/process"
 	"github.com/gornkit/gorn/pkg/script"
 )
 
 // RunOpts configures a single Run invocation.
 type RunOpts struct {
+	Input          Input
 	HelperSources  fs.FS
 	Stdout         io.Writer
 	Stderr         io.Writer
@@ -59,7 +61,19 @@ func (r *RunOpts) invocation() string {
 // named by o.ScriptPath. Print flags short-circuit to emit artifacts instead of
 // running.
 func Run(o RunOpts) error {
-	source, err := readSource(o.ScriptPath)
+	return RunContext(context.Background(), o)
+}
+
+// RunContext executes an invocation with cancellation. Cancellable stdin source
+// reads require Input.Interrupt; the caller retains IO ownership.
+func RunContext(ctx context.Context, o RunOpts) error {
+	if ctx == nil {
+		return fmt.Errorf("nil invocation context")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	source, err := readSource(ctx, o.ScriptPath, o.Input)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", o.ScriptPath, err)
 	}
@@ -85,6 +99,9 @@ func Run(o RunOpts) error {
 		}
 		return fmt.Errorf("generate: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// The print flags are inspect-only: print and do not run.
 	if o.PrintMod || o.PrintMain {
@@ -108,11 +125,14 @@ func Run(o RunOpts) error {
 			return fmt.Errorf("%s: import C is unsupported by the pure-Go build profile at line %d", gen.SourcePath, imp.Line)
 		}
 	}
-	profile, err := buildprofile.Discover(gen.GoVersion, helperDigest)
+	profile, err := buildprofile.DiscoverContext(ctx, gen.GoVersion, helperDigest)
 	if err != nil {
 		return fmt.Errorf("build profile: %w", err)
 	}
 	source = source.WithBuildIdentity(profile.Identity())
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	cacheRoot, err := cache.Open()
 	if err != nil {
@@ -124,11 +144,11 @@ func Run(o RunOpts) error {
 			if o.Verbose {
 				_, _ = fmt.Fprintf(o.Stderr, "cache: hit %s\n", appBin)
 			}
-			return execCmd(o, appBin)
+			return execCmd(ctx, o, appBin)
 		}
 	}
 
-	entry, err := cacheRoot.Build(source, gen, o.NoCache, bundle, profile)
+	entry, err := cacheRoot.BuildContext(ctx, source, gen, o.NoCache, bundle, profile)
 	if err != nil {
 		return fmt.Errorf("emit: %w", err)
 	}
@@ -144,17 +164,23 @@ func Run(o RunOpts) error {
 		}
 	}
 
-	return execCmd(o, entry.AppPath)
+	return execCmd(ctx, o, entry.AppPath)
 }
 
-func execCmd(o RunOpts, appBin string) error {
+func execCmd(ctx context.Context, o RunOpts, appBin string) error {
 	cmd := exec.Command(appBin, o.Args...) //nolint:gosec  // G204
 	cmd.Stdout = o.Stdout
 	cmd.Stderr = o.Stderr
-	// TODO thread in through Opts
-	cmd.Stdin = os.Stdin
+	cmd.Stdin = o.Input.Reader
+	if cmd.Stdin == nil {
+		cmd.Stdin = os.Stdin
+	}
 
-	if err := cmd.Run(); err != nil {
+	p, err := process.Start(ctx, cmd, true)
+	if err != nil {
+		return scriptError(err)
+	}
+	if err := p.Wait(); err != nil {
 		return scriptError(err)
 	}
 
@@ -196,23 +222,4 @@ func printArtifacts(o RunOpts, gen *script.Generated) error {
 		}
 	}
 	return nil
-}
-
-func readSource(path string) (*app.Source, error) {
-	switch path {
-	case "":
-		return nil, fmt.Errorf("script path is empty")
-	case "-":
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return nil, fmt.Errorf("read stdin: %w", err)
-		}
-		return app.New(path, data)
-	default:
-		data, err := os.ReadFile(path) //nolint:gosec // G304: File path provided by user. Disabling because this is a CLI tool, not a server.
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", path, err)
-		}
-		return app.New(path, data)
-	}
 }

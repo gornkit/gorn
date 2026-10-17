@@ -241,11 +241,42 @@ only toolchain selection avoids a different compiler appearing after lookup.
 
 ## Cancellation and process ownership
 
+GORN-V1-08 implements this lifecycle through `cli.RunContext`,
+`buildprofile.DiscoverContext`, `cache.Root.BuildContext`, and immutable
+`sh.Command.Context`. Existing entry points use a background context. Root CLI
+signal handling is separate from embedding APIs; those APIs install no global
+handlers. The exact-argument `sh.Cmd` entry point shares the same process path.
+Shell startup/Strict behavior remains item 15.
+
+Evidence: [process and real PTY tests](../../pkg/process/process_posix_test.go),
+[concurrent waits and deadlines](../../pkg/process/process_test.go),
+[Windows tree/fallback tests](../../pkg/process/process_windows_test.go),
+[stalled launcher](../../pkg/buildprofile/context_test.go),
+[stalled dependency download/staging cleanup](../../pkg/cache/cancellation_test.go),
+[source-reader ownership](../../pkg/cli/input_test.go),
+[installed nested-helper and input cancellation](../../lifecycle_integration_posix_test.go),
+and [exact argv/IO/configuration tests](../../sh/command_test.go).
+
 Carry context through source collection, discovery, lock/lease acquisition,
 downloads, builds, execution, and `sh` commands. Source stdin collection must be
 interruptible; the root CLI owns its process input and may close that input on
 cancellation. Embedding APIs require an explicit interruptible-reader/ownership
 contract and must not silently close caller-owned IO.
+`cli.Input` supplies a Reader and an explicit `Interrupt` callback that promptly
+unblocks source reads. A cancellable stdin-source invocation without Interrupt or
+CollectSource fails before reading. Embedding callers choose their interruption mechanism;
+completed reads join that interruption worker before returning. An explicit
+`CollectSource(ctx)` callback can instead own source collection separately from
+runtime Reader. The root CLI alone uses a process-lifetime collector: on canceled
+stdin collection it returns immediately and exits the process, allowing the OS to
+retire a blocked inherited-stdin read. This occurs before any cache/build/runtime
+resources exist. Inherited blocking stdin's Close does not reliably unblock Read.
+Duplicating/nonblocking its shared descriptor could change runtime stdin; native
+Windows thread cancellation adds a larger platform/race surface. The root-only
+collector avoids both, and is deliberately not the embedding default. File sources
+must be regular files; use `-` with the explicit
+input contract for streams. Routine filesystem calls and arbitrary caller-owned
+IO cannot provide a universal cancellation bound.
 CLI interrupt and termination cancel supported work, clean uncommitted staging,
 and return 130/143 respectively on POSIX. Never publish a canceled build.
 Programmatic cancellation preserves `errors.Is` with context cancellation or
@@ -269,6 +300,27 @@ killed. Leader-reaper completion alone cannot end cancellation ownership.
 Ordinary successful script exit permits ordinary background
 process behavior; cancellation owns cleanup of the invocation group.
 
+The sole controller observes terminal child exit without reaping using
+`waitid(WEXITED|WNOWAIT|WNOHANG)`, polling every 10ms. It retains the leader PID
+through a 500ms TERM grace and group KILL, then performs the sole `exec.Cmd.Wait`.
+This avoids a delayed negative-PID signal after numeric identity could be reused.
+It validates matching PID and terminal `si_code`; stopped/continued reports are
+not exit, including on Darwin. Ordinary observation errors terminate the still
+owned child before waiting. ECHILD or an unexpected identity means ownership was
+lost: report that failure without signaling a potentially reused numeric group.
+Embedding programs must not reap these children or enable automatic child reaping.
+Kill/context requests arriving after the controller commits to normal reaping
+cannot revive ownership. Go-owned pipe waiting is bounded by a 500ms WaitDelay;
+caller IO that blocks forever is outside that bound.
+
+Native syscall layouts are bounded to Linux/macOS amd64 and arm64. Other POSIX
+architectures reject subprocess startup rather than use an unverified ABI.
+Windows uses native process handles. The CLI and self-contained `sh` duplicate
+the private stdlib primitive; a consistency test enforces matching source. A
+shared runtime import would violate the helper's delivery/dependency boundary.
+Polling adds at most approximately one poll interval to normal exit observation,
+in exchange for a single serialized controller without an unjoined wait worker.
+
 Bundled `sh` checks a reserved inherited ownership marker against its actual
 process group. Inside a Gorn-owned group it keeps commands in that group, so
 nested helpers remain subject to whole-invocation cancellation. Per-command
@@ -278,11 +330,39 @@ owns a group per command and cancels its members. The marker is coordination,
 not isolation. An explicitly selected external helper may create groups outside
 the runner's ownership and retains its documented lifecycle behavior.
 
+The reserved variable is `GORN_PROCESS_GROUP`. The runner installs `self` before
+exec because the new child PID is not yet known. Bundled `sh` initialization binds
+it to a numeric PGID only when that script is the actual group leader. Every Start
+rechecks that value against the current group, then propagates the canonical
+marker after Command.Env overrides. Missing, malformed, or mismatched values use
+standalone ownership. This reserved environment normalization runs no subprocesses
+and changes no signal handlers. It also covers ordinary os/exec descendants after
+bundle initialization, before the first helper command. A root script that never
+imports the bundle cannot bind `self`; separately installed/external helpers in
+its descendants retain their own lifecycle contract. Standalone helper commands
+own their own groups; this runner handshake is not a general process-tree registry.
+Lazy normalization at the first helper call would avoid init-time mutation but
+miss earlier raw os/exec descendants. A supervisor/bootstrap protocol would cover
+more arbitrary chains at the cost of a new executable protocol and distribution
+surface; v1 uses this bounded bundled-helper coordination.
+
 When stdin is the controlling terminal and the caller owns its foreground group,
 transfer terminal foreground to the child's owned group and restore it after
 completion. Use thread-scoped signal masking for restoration; do not replace the
 embedding application's global signal handlers. Verify real terminal input,
 Ctrl-C, and restoration with PTYs on both supported POSIX hosts.
+
+Restore only the expected/orphaned foreground group, including when Start fails
+after the child changes foreground but before exec succeeds. Restoration masks
+SIGTTOU on a dedicated locked thread, restores its exact previous mask, and retires
+that thread if mask restoration fails. It never installs global ignore handlers.
+The background parent cannot observe a terminal Ctrl-C handled or ignored by a
+foreground application. An application handling SIGINT and exiting zero keeps its
+successful semantics. Observed SIGINT/SIGTERM termination, and conventional exit
+130/143, trigger group cleanup while preserving the child status. Treating those
+exit values as interruption is a convention: an intentional exit130/143 receives
+the same cleanup. Full Ctrl-Z suspend/resume job control is outside v1; implementing
+it would require coordinated stop detection, parent suspension, and re-handoff.
 
 On Windows, use bounded native taskkill tree termination with direct-process kill
 fallback and reap the direct child. This is best effort, not Job Object
