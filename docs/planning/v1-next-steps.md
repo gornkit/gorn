@@ -20,12 +20,14 @@ verification evidence. GORN-V1-01 makes inspection independent of execution and
 cache access, with write-error propagation. GORN-V1-04/09 define and implement
 [execution and source identity](v1-execution-plan.md). **Build, dependency, and
 lifecycle contracts (06–08) are selected in the
-[build/runtime design](../specs/gorn-build-runtime.md); implementing them is next.**
+[build/runtime design](../specs/gorn-build-runtime.md). GORN-V1-10 implements
+metadata syntax/cardinality validation; helper bundling and pinned resolution
+(07) are next.**
 
 ## Remaining sequence
 
 1. **Implement the selected build/runtime contracts.** Start with dependency
-   validation and helper bundling (07, 10), then build identity (06), lifecycle
+   helper bundling and pinned dependency resolution (07), then build identity (06), lifecycle
    and progress (08, 11), and cache repair/leases (05). Keep profile, resolution,
    ownership, and provenance consistent before expanding build/cache commands.
 2. **Deliver core workflows (12–15).** Implement binary export, cache management,
