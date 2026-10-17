@@ -220,12 +220,12 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** startup measurement (22),
+**Next implementation slice:** versioned releases (21),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
 Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
 cache ownership/repair (05), profile (06), dependency/helper delivery (07),
 lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13), shell/exact-argv stabilization (14–15), installed workflows
-(18), onboarding (19), and the compatibility surface (20) are implemented.
+(18), onboarding (19), compatibility (20), and measured startup (22) are implemented.
 Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
 validation.
 
@@ -712,16 +712,25 @@ delivery action.
 
 **P1 · Validation/improvement · M · Depends: 05–07, 18**
 
-The promise depends on startup experience, but no performance baseline is
-recorded. Lookup hashes the entire binary on every hit; measure before changing
-that integrity check. Dependency resolution and compilation need separate timing.
+**Status: implemented.** [The startup spec](../specs/gorn-startup.md) records
+reference hardware/OS/Go, exact CLI digest and checkout state, raw distributions,
+reproduction commands, alternatives, limitations and the selected **100 ms p95
+full quiet-CLI warm budget on the reference host**. Observed warm p95 is
+53.56–54.21 ms across tiny, preamble/helper and dependency fixtures, with fifty
+warm samples each. Direct-program medians are 0.78–0.96 ms. Empty-Go-cache,
+populated-Go-cache cold and bypass distributions separate compilation from reuse.
 
-Acceptance: record cold with empty caches, cold with Go caches, warm, and bypass
-timings for tiny, preamble, and dependency-bearing fixtures. Separate runner
-overhead from script work and record OS, hardware, Go, and sample distribution.
-Set a numerical warm-start budget from beta measurements before the release
-candidate; do not invent a portable threshold here. Prove warm runs cause no
-dependency downloads. Optimize measured bottlenecks and retain integrity guarantees.
+[The internal benchmark tool](../../internal/startupbench/main.go) owns private
+Go/Gorn caches and a deterministic local module proxy. Warm runs make zero
+requests and retain the same publication; actual public-module transport remains
+release smoke work. Means, p95, min/max and all samples are saved in
+[the reference data](../benchmarks/2026-10-17-startup-linux-amd64.json).
+The measured budget leaves headroom without weakening full integrity validation;
+no optimization is selected. Shared CI does not assert a portable timing limit.
+Candidate flags/bytes require a warm reference recheck before release. The full
+benchmark and short smoke pass, raw statistics are independently recomputed, and
+default `mise run test`, Windows/macOS target lint, dependency boundaries and
+documentation checks pass. Native three-platform CI remains the landing gate.
 
 ### GORN-V1-23 — Format `.gorn` files without changing their meaning
 
@@ -769,6 +778,8 @@ Implementation model recommendation: **GPT-6.1 Sol (`gpt-6.1-sol`), high reasoni
 ## Scope deliberately deferred
 
 | Candidate | Why it waits | Revisit when |
+| Check/eject commands (16–17) | Build already compiles without execution, and standard source plus inspection provides an ordinary-Go escape path; extra authoring/export UX is not required for v1 | Repeated CI or growing-script workflows justify dedicated commands |
+| Format/dependency convenience (23–24) | Preserved ordinary Go and explicit concrete requirements cover the core workflow; rewriting/prefetch commands add another user surface | Authoring evidence shows enough recurring friction to justify source mutation helpers |
 | --- | --- | --- |
 | Fragments/includes and `.gfrag` | Adds source/dependency/mapping complexity before the single-file contract is stable | Real scripts need local organization and ordinary modules/eject do not suffice |
 | `//gorn:replace` and workspace integration | Introduces local build inputs and portability rules | A concrete local-module workflow justifies it after cache/dependency identity is settled |
@@ -792,12 +803,14 @@ contracts before beta, then settle the remaining release surface:
    release-wide verification remains part of 18–22.
 2. **Build environment (06):** delivered the local installed toolchain, pure-Go
    host profile, supported flag allowlist, and generator/profile cache identity.
-3. **Process behavior (08, 15):** implement the selected ownership/cancellation,
-   foreground terminal handoff, non-login defaults, and shell status contracts.
-   Verify real POSIX terminals and Windows process behavior.
-4. **Compatibility and distribution (20–21):** select the public package and
-   release target surfaces, installation prerequisites, and release policy before
-   stabilization and publication.
+3. **Process behavior (08, 15):** delivered ownership/cancellation, foreground
+   terminal handoff, non-login defaults and shell status contracts, with real
+   POSIX terminals and native Windows process/sharing tests.
+4. **Compatibility (20):** selected public source/CLI/JSON/helper surfaces and
+   enforced private implementation packages, dependency invariants and Go floor.
+   **Distribution (21)** remains the final required release delivery slice.
+5. **Startup (22):** measured all cache states and selected a reference-host
+   budget from recorded distributions, retaining integrity guarantees.
 
 The design constrains implementation; behavioral verification establishes when
 its backlog items are complete. Release-wide validation remains required even
@@ -805,8 +818,9 @@ when focused implementation tests pass.
 
 ## v1 release gate
 
-All P0 and P1 items are complete, with linked implementation and validation
-evidence. Optional work can be omitted without delaying the release. Specifically:
+**Pass condition:** all P0 and P1 items are complete, with linked implementation
+and validation evidence. Optional work can be omitted without delaying the
+release. Specifically:
 
 - Ordinary Go content retains its meaning, inspection cannot execute it, and
   explicit/shorthand execution agree on args, cwd, IO, status, and cancellation.

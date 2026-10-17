@@ -149,6 +149,7 @@ installed. To select a published helper, pin the parent module explicitly as
 
 ## Contracts and development
 
+- [Startup measurements](docs/specs/gorn-startup.md): reference distributions, budget and reproduction.
 - [Compatibility](docs/specs/gorn-compatibility.md): supported public surfaces and upgrades.
 - [Script format](docs/specs/gorn-script-format.md): metadata, preamble, preserved source and diagnostics.
 - [Build/runtime contract](docs/specs/gorn-build-runtime.md): toolchain/profile inputs, dependencies, process ownership, cache and export.
