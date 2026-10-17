@@ -1,6 +1,20 @@
 package app
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
+
+func TestKeyInvalidatesLegacyGeneration(t *testing.T) {
+	path, source := "/task.gorn", []byte("package main;func main(){}")
+	legacy := Key(hashStruct(keyInputs{
+		cacheVersion: 1, goversion: runtime.Version(), sourcePath: path,
+		goos: runtime.GOOS, goarch: runtime.GOARCH, source: source,
+	}))
+	if NewKey(path, source) == legacy {
+		t.Fatal("standard-main generation must not reuse a version-1 cache key")
+	}
+}
 
 // TestGenerateAppKeyDeterministicAndSensitive checks the exported key API:
 // same inputs → same 64-hex key, and both source bytes and path affect it.

@@ -149,8 +149,8 @@ func TestRunCLINormalRunSurfacesParseError(t *testing.T) {
 	if got.err == nil {
 		t.Fatal("error = nil, want parse error")
 	}
-	if !strings.Contains(got.err.Error(), "missing //gorn:main") {
-		t.Fatalf("error = %v, want missing //gorn:main", got.err)
+	if !strings.Contains(got.err.Error(), "missing func main()") {
+		t.Fatalf("error = %v, want missing func main()", got.err)
 	}
 	if strings.Contains(got.stderr, "not implemented") {
 		t.Fatalf("reached not-implemented notice despite parse failure:\n%s", got.stderr)
@@ -258,7 +258,7 @@ func TestRunCLIDoesNotFallbackForExplicitSubcommandErrors(t *testing.T) {
 }
 
 func TestRunCLIStdinShorthand(t *testing.T) {
-	cleanup := withStdin(t, "//gorn:main\nprintln(\"hi\")\n")
+	cleanup := withStdin(t, "package main\nfunc main(){println(\"hi\")}\n")
 	defer cleanup()
 
 	got := runCLIForTest(t, "-", "--print-main")

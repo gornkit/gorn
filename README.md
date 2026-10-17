@@ -37,6 +37,7 @@ globbing, and file helpers are future work.
 ## Design
 
 - [`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) — the `.gorn` script format, as currently implemented (authoritative).
+- [`docs/planning/v1-backlog.md`](docs/planning/v1-backlog.md) — current-state assessment and proposed v1 backlog (draft).
 - [`docs/archive/GORN_DESIGN.md`](docs/archive/GORN_DESIGN.md) — overall design and non-goals (historical/reference).
 - [`docs/archive/sh-package-design-v0.md`](docs/archive/sh-package-design-v0.md) — the `sh` helper package (historical/reference).
 - [`docs/archive/IMPLEMENTATION_PLAN.md`](docs/archive/IMPLEMENTATION_PLAN.md) — build order (historical/reference).
@@ -67,21 +68,35 @@ gorn --version
 #   -v, --verbose   diagnostics on stderr
 ```
 
+Known pre-alpha issue: inspection flags can execute an already cached script.
+Add `--no-cache` to inspection commands until GORN-V1-01 is fixed.
+
 The build cache lives under `$GORN_CACHE` (falling back to the user cache dir,
 then a temp dir).
 
 ## Writing scripts
 
-The smallest scripts need no imports at all — Go's builtins (`len`, `append`,
-`make`, `min`/`max`, `clear`, `range`-over-int, and the debug-only
-`print`/`println`) are always available:
+Scripts declare `package main` and an explicit `func main()`. Helpers can appear
+before or after main. Ordinary Go imports and declarations work as usual:
 
 ```go
-//gorn:main
-for i := range 3 {
-	println("tick", i) // debug builtin: writes to stderr
+//gorn:go 1.26
+package main
+
+import "fmt"
+
+func main() {
+	greet("gorn")
+}
+
+func greet(name string) {
+	fmt.Println("hello,", name)
 }
 ```
+
+An optional first-line shebang (`#!/usr/bin/env gorn`) is supported. Gorn
+preserves your Go source formatting and literal values while generating the
+module and any preamble additions. There is no `//gorn:main` divider.
 
 When a script needs real I/O or common helpers, `//gorn:preamble` makes a
 small, fixed set of packages ambient — `fmt`, `os`, `path/filepath`,
@@ -90,12 +105,15 @@ without writing the imports:
 
 ```go
 //gorn:preamble
-//gorn:main
-fmt.Println("real output, on stdout")
+package main
+
+func main() {
+	fmt.Println("real output, on stdout")
+}
 ```
 
 Note: `print`/`println` are Go debug builtins — they write to **stderr** and
-their format isn't guaranteed. Use `fmt.Println` (via the preamble) for output
+their format isn't guaranteed. Use `fmt.Println` (with an explicit import or the preamble) for output
 a human or pipeline will read. See
 [`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) for the
 full format, the preamble package list, and its rules.

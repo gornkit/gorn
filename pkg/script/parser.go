@@ -3,7 +3,12 @@ package script
 import (
 	"bytes"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/scanner"
+	"go/token"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -13,15 +18,16 @@ import (
 type ParserError string
 
 const (
-	ErrMissingMain            ParserError = "missing //gorn:main directive"
-	ErrMultipleMain           ParserError = "multiple //gorn:main directives"
-	ErrDirectiveAfterMain     ParserError = "gorn directive after //gorn:main"
-	ErrDirectiveAfterPackage  ParserError = "gorn directive after package section content has started"
+	ErrInvalidPackage         ParserError = "script must declare package main"
+	ErrMissingMain            ParserError = "missing func main()"
+	ErrMultipleMain           ParserError = "multiple main functions"
+	ErrInvalidMain            ParserError = "main must have a body and no parameters, results, or type parameters"
+	ErrDirectiveAfterPackage  ParserError = "gorn directive after package clause"
 	ErrInvalidDirective       ParserError = "invalid gorn directive"
 	ErrInvalidRequire         ParserError = "invalid //gorn:require directive"
 	ErrDuplicateGo            ParserError = "duplicate //gorn:go directive"
 	ErrDuplicateModule        ParserError = "duplicate //gorn:module directive"
-	ErrEmptyMain              ParserError = "empty //gorn:main section"
+	ErrDuplicatePreamble      ParserError = "duplicate //gorn:preamble directive"
 	ErrPreambleImportConflict ParserError = "import conflicts with //gorn:preamble package"
 )
 
@@ -32,244 +38,189 @@ type LineError struct {
 	Err  error
 }
 
-func (e *LineError) Error() string {
-	return e.Err.Error() + " at line " + strconv.Itoa(e.Line)
-}
+func (e *LineError) Error() string             { return e.Err.Error() + " at line " + strconv.Itoa(e.Line) }
+func (e *LineError) Unwrap() error             { return e.Err }
+func lineError(line int, err error) *LineError { return &LineError{Line: line, Err: err} }
 
-func (e *LineError) Unwrap() error { return e.Err }
-
-func lineError(line int, err error) *LineError {
-	return &LineError{Line: line, Err: err}
-}
-
-// File is the parsed representation of a .gorn source file.
+// File is one complete Go main file and its gorn metadata. Content preserves
+// the source bytes, except a first-line shebang (or UTF-8 BOM) is blanked with
+// spaces without changing offsets or line endings. Do not modify it after Parse.
 type File struct {
-	// SourcePath is the path passed to Parse.
-	SourcePath string
-
+	SourcePath  string
 	GoVersion   string
 	Module      string
 	Requires    []Require
 	UsePreamble bool
+	Content     []byte
 
-	// PackageContent holds the raw lines (including line terminators) that
-	// make up the package section: everything before //gorn:main, minus
-	// directive lines and the optional line-1 shebang. Directives are
-	// only permitted before any package-section content, so PackageContent
-	// is a contiguous run of the original source lines (no gaps) — this
-	// makes PackageStart sufficient as a single //line anchor when
-	// generating Go code.
-	PackageContent string
-
-	// MainContent holds the raw lines (including line terminators) that make
-	// up the main section: every line after //gorn:main, except leading
-	// blank lines immediately following the directive, which are dropped
-	// (Gorn never needs to reverse-generate the original source, so this
-	// trivia isn't preserved). Its first line corresponds to the source
-	// line recorded in MainStart.
-	MainContent string
-
-	// PackageStart is the 1-based line number of the first non-blank
-	// package-section line. Leading blank lines (including any that
-	// appear between or after directives) are not recorded and do not
-	// set PackageStart, so directives may appear after blank-only
-	// spacing without being rejected. PackageStart is nil when the
-	// script has no non-blank package-section content before
-	// //gorn:main.
-	PackageStart *int
-
-	// MainStart is the 1-based line number of the first non-blank line
-	// after //gorn:main. A script whose main section has no non-blank
-	// content (e.g. //gorn:main is the last line, or only blank lines
-	// follow it) is rejected with ErrEmptyMain, so MainStart is always
-	// a valid line (never 0) on a successful parse.
-	MainStart int
+	sourceName string
+	fset       *token.FileSet
+	syntax     *ast.File
 }
 
-// Dump writes a developer-oriented summary of the parsed script, including
-// parser internals, to w on a best-effort basis. It backs `gorn run
-// --verbose` diagnostics.
-func (f *File) Dump(w io.Writer) {
-	p := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format, args...) }
-	p("--- parsed script ---\n")
-	p("Path:         %s\n", f.SourcePath)
-	p("GoVersion:    %q\n", f.GoVersion)
-	p("Module:       %q\n", f.Module)
-	p("UsePreamble:  %t\n", f.UsePreamble)
-	p("Requires:     %+v\n", f.Requires)
-	p("PackageStart: %s\n", intPtrString(f.PackageStart))
-	p("MainStart:    %d\n", f.MainStart)
-	p("--- PackageContent ---\n")
-	p("%s", f.PackageContent)
-	p("--- MainContent ---\n")
-	p("%s", f.MainContent)
-	p("--- end ---\n")
-}
+type Require struct{ Path, Version string }
 
-func intPtrString(p *int) string {
-	if p == nil {
-		return "<nil>"
-	}
-	return strconv.Itoa(*p)
-}
-
-type Require struct {
-	Path    string
-	Version string
-}
-
-type state struct {
-	seenMain          bool
-	mainDirectiveLine int
-	currLine          int
-	mainBuilder       strings.Builder
-	packageBuilder    strings.Builder
-	script            *File
-}
-
+// Parse validates the Go file and entry point and reads standalone metadata
+// comments from the header before package main. Go syntax errors retain their
+// original source positions and underlying scanner.ErrorList.
 func Parse(s *app.Source) (*File, error) {
-	data := s.Data()
-
-	state := &state{
-		script: &File{
-			SourcePath: s.Path(),
-		},
+	name := s.Path()
+	if name != "/dev/stdin" {
+		var err error
+		name, err = filepath.Abs(name)
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	for line := range bytes.Lines(data) {
-		state.currLine++
-		// Shebang handling is intentionally permissive: any line 1 prefixed
-		// with "#!" is treated as a shebang and discarded verbatim. Gorn
-		// does not validate or require a specific shebang target (e.g.
-		// "#!/usr/bin/env gorn"); this is a deliberate choice, not an
-		// oversight, so scripts remain runnable regardless of how they are
-		// invoked.
-		if state.currLine == 1 && bytes.HasPrefix(line, []byte("#!")) {
+	f := &File{SourcePath: s.Path(), sourceName: name, Content: bytes.Clone(s.Data()), fset: token.NewFileSet()}
+	if bytes.HasPrefix(f.Content, []byte("#!")) {
+		for i, b := range f.Content {
+			if b == '\n' {
+				break
+			}
+			if b != '\r' {
+				f.Content[i] = ' '
+			}
+		}
+	}
+	if bytes.HasPrefix(f.Content, []byte{0xef, 0xbb, 0xbf}) {
+		copy(f.Content, "   ")
+	}
+	var err error
+	f.syntax, err = parser.ParseFile(f.fset, name, f.Content, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range f.syntax.Comments {
+		for _, comment := range group.List {
+			if !strings.HasPrefix(comment.Text, "//gorn:") {
+				continue
+			}
+			pos := f.position(comment.Pos())
+			start := bytes.LastIndexByte(f.Content[:pos.Offset], '\n') + 1
+			if len(bytes.TrimSpace(f.Content[start:pos.Offset])) != 0 {
+				continue
+			}
+			if comment.Pos() > f.syntax.Package {
+				return nil, lineError(pos.Line, ErrDirectiveAfterPackage)
+			}
+			if err := f.applyDirective(strings.TrimPrefix(comment.Text, "//gorn:")); err != nil {
+				return nil, lineError(pos.Line, err)
+			}
+		}
+	}
+	if f.syntax.Name.Name != "main" {
+		return nil, lineError(f.position(f.syntax.Name.Pos()).Line, ErrInvalidPackage)
+	}
+	var main *ast.FuncDecl
+	for _, decl := range f.syntax.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil || fn.Name.Name != "main" {
 			continue
 		}
-
-		trimmed := bytes.TrimSpace(line)
-
-		// handle directives
-		if after, ok := bytes.CutPrefix(trimmed, []byte("//gorn:")); ok {
-			directive := after
-			if strings.TrimSpace(string(directive)) == "main" {
-				if state.seenMain {
-					return nil, lineError(state.currLine, ErrMultipleMain)
-				}
-				state.seenMain = true
-				state.mainDirectiveLine = state.currLine
-				continue
-			}
-
-			if state.seenMain {
-				return nil, lineError(state.currLine, ErrDirectiveAfterMain)
-			}
-			// Directives must precede all real (non-blank) package-section
-			// content, so that PackageLines stays a contiguous run of
-			// source lines once it starts. A single //line marker at
-			// PackageStart would otherwise misalign once a directive is
-			// filtered out from the middle of an otherwise-contiguous
-			// block. Leading blank lines don't count as "started" (see the
-			// package-section branch below), so directives may still
-			// appear after blank-only spacing.
-			if state.script.PackageStart != nil {
-				return nil, lineError(state.currLine, ErrDirectiveAfterPackage)
-			}
-
-			if err := state.applyDirective(directive); err != nil {
-				return nil, lineError(state.currLine, err)
-			}
-
-			continue
+		if main != nil {
+			return nil, lineError(f.position(fn.Name.Pos()).Line, ErrMultipleMain)
 		}
-
-		if state.seenMain {
-			// Leading blank lines immediately after //gorn:main carry no
-			// content worth generating or anchoring a //line marker to.
-			// Gorn never needs to reverse-generate the original source, so
-			// they are dropped entirely rather than preserved, keeping
-			// MainStart aligned with the first main line.
-			if state.script.MainStart == 0 && len(trimmed) == 0 {
-				continue
-			}
-			if state.script.MainStart == 0 {
-				state.script.MainStart = state.currLine
-			}
-			state.mainBuilder.Write(line)
-		} else {
-			// Leading blank lines carry no content worth anchoring a //line
-			// marker to, and including them would let a following directive
-			// falsely appear to come "after package content". Drop them
-			// entirely until the first non-blank line is seen.
-			if state.script.PackageStart == nil && len(trimmed) == 0 {
-				continue
-			}
-			if state.script.PackageStart == nil {
-				state.script.PackageStart = new(state.currLine)
-			}
-			state.packageBuilder.Write(line)
-		}
-
-		continue
+		main = fn
 	}
-
-	if !state.seenMain {
-		return nil, lineError(state.currLine, ErrMissingMain)
+	if main == nil {
+		return nil, lineError(f.position(f.syntax.Package).Line, ErrMissingMain)
 	}
-	if state.script.MainStart == 0 {
-		return nil, lineError(state.mainDirectiveLine, ErrEmptyMain)
+	if main.Body == nil || main.Type.Params.NumFields() != 0 || main.Type.Results.NumFields() != 0 || main.Type.TypeParams.NumFields() != 0 {
+		return nil, lineError(f.position(main.Name.Pos()).Line, ErrInvalidMain)
 	}
-
-	state.script.MainContent = state.mainBuilder.String()
-	state.script.PackageContent = state.packageBuilder.String()
-	return state.script, nil
+	return f, nil
 }
 
-func (s *state) applyDirective(directive []byte) error {
-	parts := bytes.Fields(directive)
+func (f *File) position(pos token.Pos) token.Position { return f.fset.PositionFor(pos, false) }
+
+// packageEnd includes the package terminator and its trailing comments. Keeping
+// comments in place avoids promoting a trailing //line into a column-one
+// directive. Implicit semicolons inside block comments must not split them.
+func (f *File) packageEnd() int {
+	var scan scanner.Scanner
+	file := token.NewFileSet().AddFile(f.sourceName, -1, len(f.Content))
+	scan.Init(file, f.Content, nil, scanner.ScanComments)
+	nameEnd := f.position(f.syntax.Name.End()).Offset
+	commentEnd := 0
+	for {
+		pos, tok, _ := scan.Scan()
+		offset := file.Offset(pos)
+		if tok == token.COMMENT && offset >= nameEnd {
+			commentEnd = f.commentEnd(offset)
+		}
+		if tok == token.SEMICOLON {
+			end := max(offset+1, commentEnd)
+			for end < len(f.Content) && f.Content[end-1] != '\n' {
+				pos, tok, _ = scan.Scan()
+				offset = file.Offset(pos)
+				if tok != token.COMMENT || bytes.ContainsRune(f.Content[end:offset], '\n') || len(bytes.TrimSpace(f.Content[end:offset])) != 0 {
+					break
+				}
+				end = f.commentEnd(offset)
+			}
+			return end
+		}
+		if tok == token.EOF {
+			return nameEnd
+		}
+	}
+}
+
+func (f *File) commentEnd(offset int) int {
+	if bytes.HasPrefix(f.Content[offset:], []byte("//")) {
+		if newline := bytes.IndexByte(f.Content[offset:], '\n'); newline >= 0 {
+			return offset + newline + 1
+		}
+		return len(f.Content)
+	}
+	return offset + bytes.Index(f.Content[offset:], []byte("*/")) + 2
+}
+
+func (f *File) applyDirective(directive string) error {
+	parts := strings.Fields(directive)
 	if len(parts) == 0 {
 		return ErrInvalidDirective
 	}
-
-	switch string(parts[0]) {
+	switch parts[0] {
 	case "go":
 		if len(parts) != 2 {
 			return ErrInvalidDirective
 		}
-		if s.script.GoVersion != "" {
+		if f.GoVersion != "" {
 			return ErrDuplicateGo
 		}
-		s.script.GoVersion = string(parts[1])
-		return nil
+		f.GoVersion = parts[1]
 	case "module":
 		if len(parts) != 2 {
 			return ErrInvalidDirective
 		}
-		if s.script.Module != "" {
+		if f.Module != "" {
 			return ErrDuplicateModule
 		}
-		s.script.Module = string(parts[1])
-		return nil
+		f.Module = parts[1]
 	case "require":
-		if len(parts) != 3 {
+		if len(parts) != 3 || parts[2] == "latest" {
 			return ErrInvalidRequire
 		}
-		if string(parts[2]) == "latest" {
-			return ErrInvalidRequire
-		}
-		s.script.Requires = append(s.script.Requires, Require{
-			Path:    string(parts[1]),
-			Version: string(parts[2]),
-		})
-		return nil
+		f.Requires = append(f.Requires, Require{Path: parts[1], Version: parts[2]})
 	case "preamble":
 		if len(parts) != 1 {
 			return ErrInvalidDirective
 		}
-		s.script.UsePreamble = true
-		return nil
+		if f.UsePreamble {
+			return ErrDuplicatePreamble
+		}
+		f.UsePreamble = true
+	default:
+		return ErrInvalidDirective
 	}
+	return nil
+}
 
-	return ErrInvalidDirective
+// Dump writes source and metadata for verbose diagnostics on a best-effort basis.
+func (f *File) Dump(w io.Writer) {
+	p := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format, args...) }
+	p("--- parsed script ---\nPath: %s\nGoVersion: %q\nModule: %q\nUsePreamble: %t\nRequires: %+v\n--- source ---\n%s",
+		f.SourcePath, f.GoVersion, f.Module, f.UsePreamble, f.Requires, f.Content)
 }

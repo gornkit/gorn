@@ -1,0 +1,16 @@
+#!/usr/bin/env gorn
+
+//gorn:require github.com/alexflint/go-arg v1.6.1
+//gorn:preamble
+
+package main
+
+import "github.com/alexflint/go-arg"
+
+func main() {
+	var opts struct {
+		Name string `arg:"positional"`
+	}
+	arg.MustParse(&opts)
+	fmt.Println("hello,", opts.Name)
+}

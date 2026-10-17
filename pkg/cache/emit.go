@@ -51,7 +51,7 @@ func (r Root) Build(s *app.Source, g *script.Generated, noCache bool) (Entry, er
 		}
 	}()
 
-	if err := os.WriteFile(filepath.Join(buildDir, "main.gorn.go"), g.MainFileFormatted, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(buildDir, "main.gorn.go"), g.MainGenerated, 0o600); err != nil {
 		return result, err
 	}
 	if err := os.WriteFile(filepath.Join(buildDir, "go.mod"), g.ModGenerated, 0o600); err != nil {
