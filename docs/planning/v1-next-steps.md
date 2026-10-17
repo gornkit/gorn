@@ -36,7 +36,9 @@ distributions and a measured reference-host budget. Releases (21) remain.**
 
 ## Remaining sequence
 
-1. **Deliver the release candidate (21).** Prepare and verify versioned binaries,
+1. **Deliver the release candidate (21).** The [release contract](../specs/gorn-release.md)
+   records selected targets, alternatives, trade-offs, candidate/final ordering
+   and recovery. Prepare and verify versioned binaries,
    checksums, source installation and published helper resolution. Recheck the
    candidate against the measured startup budget. Installed workflows/onboarding
    (18–19), compatibility (20) and startup measurement (22) are delivered.

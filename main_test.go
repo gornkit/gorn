@@ -278,3 +278,18 @@ func usageLine(help string) string {
 	}
 	return ""
 }
+
+func TestSelectedVersion(t *testing.T) {
+	for _, tc := range []struct{ stamp, module, want string }{
+		{"v1.0.0", "v1.0.0-rc.1", "v1.0.0"},
+		{"", "v1.0.0-rc.1", "v1.0.0-rc.1"},
+		{"dev", "v1.0.0", "dev"},
+		{"dev", "(devel)", "dev"},
+		{"", "v1.0.0", "v1.0.0"},
+		{"dev", "", "dev"},
+	} {
+		if got := selectedVersion(tc.stamp, tc.module); got != tc.want {
+			t.Errorf("selectedVersion(%q, %q) = %q, want %q", tc.stamp, tc.module, got, tc.want)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"syscall"
@@ -20,7 +21,7 @@ import (
 //go:embed sh/command.go sh/doc.go sh/pkg.go sh/process.go sh/process_core.go sh/process_posix.go sh/process_linux.go sh/process_darwin.go sh/process_windows.go sh/process_unsupported.go sh/process_marker.go sh/result.go sh/shellspec.go sh/shell_command_other.go sh/shell_command_windows.go LICENSE
 var helperSources embed.FS
 
-var Version = "dev"
+var Version string
 
 var subcommandNames = []string{"run", "build", "cache"}
 
@@ -89,7 +90,24 @@ func (CLI) Description() string {
 }
 
 func (CLI) Version() string {
-	return "gorn " + Version
+	info, _ := debug.ReadBuildInfo()
+	moduleVersion := ""
+	if info != nil {
+		moduleVersion = info.Main.Version
+	}
+	return "gorn " + selectedVersion(Version, moduleVersion)
+}
+
+// An explicit stamp wins. Source installations carry their selected module
+// version; ordinary local builds keep the established dev label.
+func selectedVersion(stamp, moduleVersion string) string {
+	if stamp != "" {
+		return stamp
+	}
+	if moduleVersion != "" && moduleVersion != "(devel)" {
+		return moduleVersion
+	}
+	return "dev"
 }
 
 func main() {

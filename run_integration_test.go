@@ -117,6 +117,11 @@ func TestRunCLIInspectionNeverExecutesOrChangesCache(t *testing.T) {
 						name += ".exe"
 					}
 					corrupt = filepath.Join(filepath.Dir(manifests[0]), "bin", name)
+					// Replace the completed executable instead of truncating its
+					// inode: Linux can briefly retain ETXTBSY after process exit.
+					if err := os.Remove(corrupt); err != nil {
+						t.Fatal(err)
+					}
 				}
 				if corrupt != "" {
 					if err := os.WriteFile(corrupt, []byte("corrupt"), 0o600); err != nil { //nolint:gosec // G703: controlled fixture cache path.

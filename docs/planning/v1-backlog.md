@@ -693,8 +693,26 @@ as a behavior change. Native three-platform CI remains the landing gate.
 
 **P1 · Delivery · M · Depends: 12, 18–20, 22**
 
-This checkout has a CI workflow but no release workflow. Add the release process
-only after the supported targets and helper version strategy are settled.
+**Status: implementation in progress.** The [release contract](../specs/gorn-release.md)
+selects candidate-first `v1.0.0-rc.1` then `v1.0.0`, five archive targets, native
+three-platform verification, immutable tags/assets and gated Latest promotion.
+It records alternatives, trade-offs, the unavoidable public-module tag ordering
+risk and recovery. Contributor tooling, reusable CI, published-asset/module
+smokes and [upgrade notes](../releases/v1.0.0.md) are delivered together. Actual
+candidate and stable publication evidence remains required before completion.
+Local preview cross-builds cover all five targets; Linux downloaded-archive-shaped
+verification covers checksums, modes, version, arguments and no-Go export. Stripped
+candidate-flag preview warm p95 is 50.31–51.88 ms across the three fixtures (50
+samples each), below the 100 ms reference budget. Focused version/identity,
+archive/checksum, poisoned resolver-environment, preview/wrong-revision and real
+dependency-boundary tests pass. Independent P0 review closed four gate gaps:
+checksum bypass settings, tag provenance, dispatch CI and compiled helper origin.
+An existing inspection test exposed transient Linux ETXTBSY when truncating a
+just-exited executable; its corruption fixture now replaces that inode and twenty
+repeats pass. Final default `mise run test` passes in 28.80 s; Windows/macOS target
+lint, dependency/embedding/mirror boundaries, documentation checks and frozen
+archives pass. Hosted native CI and real published-module/asset smokes remain
+explicit delivery gates.
 
 Acceptance: prepare tagged, version-stamped binaries and checksums for the
 declared target matrix. Verify the installed command and `go install` path,
