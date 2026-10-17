@@ -693,31 +693,26 @@ as a behavior change. Native three-platform CI remains the landing gate.
 
 **P1 · Delivery · M · Depends: 12, 18–20, 22**
 
-**Status: implementation in progress.** The [release contract](../specs/gorn-release.md)
-selects candidate-first `v1.0.0-rc.1` then `v1.0.0`, five archive targets, native
-three-platform verification, immutable tags/assets and gated Latest promotion.
-It records alternatives, trade-offs, the unavoidable public-module tag ordering
-risk and recovery. Contributor tooling, reusable CI, published-asset/module
-smokes and [upgrade notes](../releases/v1.0.0.md) are delivered together. Actual
-candidate and stable publication evidence remains required before completion.
-Local preview cross-builds cover all five targets; Linux downloaded-archive-shaped
-verification covers checksums, modes, version, arguments and no-Go export. Stripped
-candidate-flag preview warm p95 is 50.31–51.88 ms across the three fixtures (50
-samples each), below the 100 ms reference budget. Focused version/identity,
-archive/checksum, poisoned resolver-environment, preview/wrong-revision and real
-dependency-boundary tests pass. Independent P0 review closed four gate gaps:
-checksum bypass settings, tag provenance, dispatch CI and compiled helper origin.
-An existing inspection test exposed transient Linux ETXTBSY when truncating a
-just-exited executable; its corruption fixture now replaces that inode and twenty
-repeats pass. Final default `mise run test` passes in 28.80 s; Windows/macOS target
-lint, dependency/embedding/mirror boundaries, documentation checks and frozen
-archives pass. Hosted native CI and real published-module/asset smokes remain
-explicit delivery gates. Initial native CI exposed Go's clean-checkout module
-version derivation, which the local worktree does not carry. Version selection now
-ignores VCS-derived local labels without an explicit stamp, preserving `dev` while
-retaining actual source-install tag/pseudoversion labels; both paths have coverage.
-A clean private Git directory reproduces the hosted build conditions and its real
-CLI/version/cache-identity checks pass; the final full gate passes in 28.74 s.
+**Status: implemented and candidate-qualified; stable publication remains.**
+The [release contract](../specs/gorn-release.md) selects candidate-first
+`v1.0.0-rc.1` then `v1.0.0`, five archive targets, native three-platform
+verification, immutable tags/assets and gated Latest promotion. It records
+alternatives, trade-offs, the unavoidable public-module tag ordering risk and
+recovery. Contributor tooling, reusable CI, published-asset/module smokes and
+[upgrade notes](../releases/v1.0.0.md) are delivered together. Actual stable
+publication evidence remains required before completion.
+
+Focused version/cache-identity, archive/checksum, poisoned resolver-environment,
+preview/wrong-revision and dependency-boundary checks pass. Independent P0 review
+verifies checksum bypass prevention, tag provenance, dispatch CI and compiled
+helper origin. Clean local VCS builds retain `dev`, including Go-derived module
+versions, while source installs report their actual selected tag/pseudoversion.
+A private real Git checkout verifies that distinction. An inspection corruption
+fixture replaces the completed executable rather than truncating its inode after
+transient Linux ETXTBSY; twenty repeats pass. Final default `mise run test` passes
+in 28.74 s; Windows/macOS target lint, dependency/embedding/mirror boundaries,
+documentation checks and frozen archives pass. Native release gates are verified
+below rather than inferred from local previews.
 
 Acceptance: prepare tagged, version-stamped binaries and checksums for the
 declared target matrix. Verify the installed command and `go install` path,
@@ -730,6 +725,15 @@ the final module tag. Publish release notes and upgrade instructions.
 Package-manager integrations can follow after the direct install paths work.
 Publishing remains a separately approved
 delivery action.
+
+Candidate `v1.0.0-rc.1` is published at the verified source commit
+`dbcb08603646f17d2738f81f8d2fef54e831b905`. The [release run](https://github.com/gornkit/gorn/actions/runs/39046193772)
+passes all three native validation and downloaded-archive/public-module/helper
+smoke jobs; compiled metadata proves the exact parent tag with no replacement.
+Local published verification and all seven asset checksums pass independently.
+Published Linux warm p95 is 52.17–52.96 ms, fifty samples per fixture, with
+[raw evidence](../benchmarks/2026-10-17-rc1-startup-linux-amd64.json). Candidate
+qualification and stable install/upgrade guidance are recorded before final tagging.
 
 ### GORN-V1-22 — Measure whether reruns feel immediate
 
@@ -750,7 +754,7 @@ release smoke work. Means, p95, min/max and all samples are saved in
 [the reference data](../benchmarks/2026-10-17-startup-linux-amd64.json).
 The measured budget leaves headroom without weakening full integrity validation;
 no optimization is selected. Shared CI does not assert a portable timing limit.
-Candidate flags/bytes require a warm reference recheck before release. The full
+Published candidate flags/bytes have passed the warm reference recheck (52.17–52.96 ms p95, fifty samples per fixture). The full
 benchmark and short smoke pass, raw statistics are independently recomputed, and
 default `mise run test`, Windows/macOS target lint, dependency boundaries and
 documentation checks pass. Native three-platform CI remains the landing gate.

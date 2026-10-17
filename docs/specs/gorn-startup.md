@@ -119,3 +119,18 @@ trust would weaken build identity/integrity. The measured 100 ms budget does not
 require that trade-off. Shared CI timings are noisy and differ in hardware; a
 reference comparison plus deterministic no-download tests gives actionable
 regression evidence without inventing a universal threshold.
+
+## Published candidate qualification
+
+The actual `v1.0.0-rc.1` Linux/amd64 archive, downloaded from GitHub Releases,
+passes the same reference-host warm check: fifty samples per fixture, warm p95
+52.96 ms tiny, 52.79 ms preamble and 52.17 ms dependency. All remain below the
+100 ms reference budget. [Raw candidate data](../benchmarks/2026-10-17-rc1-startup-linux-amd64.json)
+records the exact binary SHA-256
+`14584524bca18ffc0282db5582a90784614cc33d6b0915785d8df1462373ee26`,
+source/embedded VCS revision `dbcb08603646f17d2738f81f8d2fef54e831b905`,
+pinned Go, hardware and distributions. All seven candidate asset checksums match;
+local published-archive/source-install/helper verification and native three-platform
+release smoke pass. This measures delivered release flags/bytes rather than
+extrapolating from an unstripped development executable. It does not create a
+portable CI timing promise.
