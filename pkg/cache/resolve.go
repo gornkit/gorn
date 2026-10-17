@@ -17,6 +17,7 @@ import (
 
 	"github.com/gornkit/gorn/pkg/buildprofile"
 	"github.com/gornkit/gorn/pkg/process"
+	"github.com/gornkit/gorn/pkg/progress"
 	"github.com/gornkit/gorn/pkg/script"
 	"golang.org/x/mod/modfile"
 )
@@ -54,17 +55,46 @@ func newResolver(dir string, profile *buildprofile.Profile) *resolver {
 }
 
 func (r *resolver) command(args ...string) ([]byte, error) {
+	phase := args[0]
+	if phase == "mod" && len(args) > 1 {
+		phase += " " + args[1]
+	}
+	label := "resolving module graph"
+	switch phase {
+	case "build":
+		label = "compiling script"
+	case "mod download":
+		label = "downloading declared dependencies"
+	case "list":
+		if len(args) > 1 && args[1] == "std" {
+			label = "classifying imports"
+		}
+	}
+	if err := progress.Phase(r.ctx, label); err != nil {
+		return nil, err
+	}
 	cmd := exec.Command(r.goPath, args...) //nolint:gosec // G204: discovered installed Go with internally constructed arguments.
 	cmd.Dir, cmd.Env = r.dir, r.env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := process.Run(r.ctx, cmd); err != nil {
+	var streamed *progress.Diagnostics
+	if report := progress.FromContext(r.ctx); report != nil {
+		streamed = report.Diagnostics(sanitizeStreamDiagnostic)
+		cmd.Stderr = streamed
+	}
+	err := process.Run(r.ctx, cmd)
+	if streamed != nil {
+		err = errors.Join(err, streamed.Close())
+	}
+	if err != nil {
 		// Build flags can contain private -X values. Only the phase is public.
-		phase := args[0]
-		if phase == "mod" && len(args) > 1 {
-			phase += " " + args[1]
+		detail := ""
+		if streamed == nil {
+			text := stderr.String()
+			end := strings.LastIndexByte(text, '\n') + 1
+			detail = "\n" + sanitizeDiagnostic(text[:end]) + sanitizeStreamDiagnostic(text[end:], false)
 		}
-		return nil, fmt.Errorf("go %s: %w\n%s", phase, err, sanitizeDiagnostic(stderr.String()))
+		return nil, fmt.Errorf("go %s: %w%s", phase, err, detail)
 	}
 	return stdout.Bytes(), nil
 }
@@ -86,6 +116,15 @@ func sanitizeDiagnostic(text string) string {
 		}
 		return url
 	})
+}
+
+func sanitizeStreamDiagnostic(text string, completeLine bool) string {
+	if !completeLine {
+		// Cancellation can end a valid credential-bearing URL before its @ or
+		// query delimiter. Redact the whole URL in an unterminated fragment.
+		return diagnosticURL.ReplaceAllString(text, "[redacted URL fragment]")
+	}
+	return sanitizeDiagnostic(text)
 }
 
 func (r *resolver) resolve(g *script.Generated, bundle *script.HelperBundle) (*Resolution, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/gornkit/gorn/pkg/script"
@@ -61,5 +62,26 @@ func TestRunInspectionPropagatesWriteFailure(t *testing.T) {
 	})
 	if !errors.Is(err, failure) {
 		t.Fatalf("Run error: %v", err)
+	}
+}
+
+func TestBackgroundStdinInspectionRetainsReaderContract(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := Run(RunOpts{Input: Input{Reader: strings.NewReader("package main\nfunc main(){}\n")}, Stdout: &stdout, Stderr: &stderr, PrintMain: true, ScriptPath: "-"})
+	if err != nil || !strings.Contains(stdout.String(), "func main(){}") {
+		t.Fatalf("inspection=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+}
+
+type untouchedReader struct{ reads int }
+
+func (r *untouchedReader) Read([]byte) (int, error) { r.reads++; return 0, io.EOF }
+
+func TestProgressWriteFailureStopsBeforeSourceWork(t *testing.T) {
+	failure := errors.New("stderr closed")
+	reader := &untouchedReader{}
+	err := Run(RunOpts{Input: Input{Reader: reader}, Stdout: &bytes.Buffer{}, Stderr: &failingWriter{err: failure}, ScriptPath: "-", PrintMain: true})
+	if !errors.Is(err, failure) || ExitStatus(err) != 1 || reader.reads != 0 {
+		t.Fatalf("error=%v status=%d reads=%d", err, ExitStatus(err), reader.reads)
 	}
 }

@@ -106,7 +106,7 @@ func main(){
 
 func TestInstalledCLITerminatesBlockedSourceInput(t *testing.T) {
 	bin := builtCLI(t)
-	cmd := exec.Command(bin, "run", "-")
+	cmd := exec.Command(bin, "run", "--quiet", "-")
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)

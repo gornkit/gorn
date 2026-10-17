@@ -9,6 +9,7 @@ import (
 
 	"github.com/gornkit/gorn/pkg/app"
 	"github.com/gornkit/gorn/pkg/buildprofile"
+	"github.com/gornkit/gorn/pkg/progress"
 	"github.com/gornkit/gorn/pkg/script"
 )
 
@@ -45,6 +46,9 @@ func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generat
 	}
 	if profile == nil || s.BuildIdentity() != profile.Identity() {
 		return result, fmt.Errorf("source must be bound to the selected build profile")
+	}
+	if err := progress.Phase(ctx, "preparing build"); err != nil {
+		return result, err
 	}
 
 	tmpParent := r.TmpDir()

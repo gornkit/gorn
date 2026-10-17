@@ -65,11 +65,18 @@ gorn --version
 #   --print-mod     print the generated go.mod, then exit (does not run)
 #   --print-main    print the generated main.go, then exit (does not run)
 #   --no-cache      build fresh and bypass the cache
+#   -q, --quiet     suppress gorn phase/heartbeat progress
 #   -v, --verbose   diagnostics on stderr
 ```
 
 Inspection parses and generates source without running the script, accessing the
 build cache, or invoking Go. Output-write failures are reported as errors.
+
+Gorn announces preparation phases immediately and reports pending work every two
+seconds on stderr. `--quiet` suppresses those messages, preserving Go diagnostics
+and script stderr. Explicit `--verbose` diagnostics remain available with quiet.
+Progress stops before the script takes control of its original terminal streams;
+the script owns its own runtime activity. Artifact/script stdout remains pipeable.
 
 Use `--` before script arguments that look like gorn flags. Child exit codes and
 stdout/stderr are preserved; usage errors go to stderr with status 2. Scripts run

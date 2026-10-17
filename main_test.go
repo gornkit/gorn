@@ -34,7 +34,7 @@ func runCLIForTest(t *testing.T, args ...string) (result runResult) {
 		}
 	}()
 
-	result.err = RunCLI(args, &stdout, &stderr, func(code int) {
+	result.err = RunCLI(append([]string{"--quiet"}, args...), &stdout, &stderr, func(code int) {
 		panic(exitCode(code))
 	})
 	return result

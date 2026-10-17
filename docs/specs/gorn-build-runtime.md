@@ -440,10 +440,59 @@ regular-file replacement policy.
 
 ## Progress and verification
 
+GORN-V1-11 implements immediate preparation phases and a two-second stderr
+heartbeat for pending source collection, discovery, cache access, dependency
+resolution/downloads, and compilation. `-q`/`--quiet` suppresses Gorn's activity
+messages, including during inspection. It preserves sanitized Go diagnostics,
+script stderr, and explicitly requested verbose diagnostics. Help/version do not
+start reporting. Missing Go, source, dependency, compiler, and script failures keep
+their phase/cause; internal generated-source dumps require `--verbose`, while
+`--print-main` remains the explicit inspect-only artifact path.
+
+[Reporter tests](../../pkg/progress/progress_test.go) cover synchronous initial
+output, heartbeat/quiet behavior, joined shutdown, synchronized writers, IO
+failure cancellation, complete-line framing, EOF, and oversized diagnostics.
+[Resolver streaming tests](../../pkg/cache/progress_test.go) prove redacted
+diagnostics appear before a still-running child exits and are not replayed in
+its final error. [Installed CLI tests](../../progress_integration_test.go) cover
+cold/warm/bypass phases, quiet aliases, compiler failures, blocked-source
+heartbeats, slow dependency failures/redaction, stdout integrity, and runtime
+handoff. [Background stdin compatibility](../../pkg/cli/runcmd_test.go) keeps
+uncancellable embedding reads from acquiring a new ownership requirement merely
+because reporting uses an internal cancellation context.
+
+Selected reporting decisions and trade-offs:
+
+- Always announce preparation immediately, rather than use a delayed spinner.
+  A fixed two-second heartbeat establishes that work is still pending without
+  claiming a percentage or ETA. Plain lines work across terminals and redirected
+  logs; quiet supports automation that only wants program/diagnostic output.
+- Serialize preparation/artifact/Go-diagnostic writers. Stop and join reporting
+  before execution, then pass the original runtime IO objects. Wrapping runtime
+  `*os.File` streams would make os/exec substitute pipes and lose terminal identity;
+  a parent heartbeat could also write while its child owns terminal foreground.
+  The final `running script` phase is immediate; script runtime has no Gorn
+  heartbeat and retains ordinary interactive behavior.
+- Buffer a diagnostic only until its newline, then sanitize URL userinfo/query
+  values before output. Do not stream raw chunks: a credential can span writes.
+  At EOF redact a URL in an unterminated fragment in full, since cancellation may
+  have cut it off before its credential delimiter. The same EOF policy applies
+  to non-reporting library errors. Omit an entire line over 64 KiB, with a fixed
+  notice, rather than buffer without limit or expose an unsafe partial line.
+- Preserve Go diagnostics even in quiet mode, including any informational Go
+  messages. Filtering by Go's human-message wording could hide useful warnings or
+  failures as compiler versions change. Toolchain discovery still withholds raw
+  private configuration diagnostics under the selected profile policy.
+- A reporting/output failure cancels pending Go work and retains its underlying
+  IO error with runner status 1. Caller-owned blocking IO still follows the
+  lifecycle contract. Existing background stdin reads without an interruption
+  callback retain their declared blocking mode; reporting cannot invent authority
+  to close or interrupt that reader.
+
 Emit phase information immediately before source/lock waits, discovery, downloads,
 and compilation,
 and periodic stderr status while slow work is pending. Stream useful Go errors.
-Quiet suppresses progress, not compiler errors or script stderr. Synchronize
+Quiet suppresses Gorn progress, not compiler errors or script stderr. Synchronize
 progress and subprocess writes, then stop and join the heartbeat before return.
 Keep stdout for script/artifact/structured results. Missing Go, unsupported
 inputs, dependency, compiler, and script failures identify their phase without
