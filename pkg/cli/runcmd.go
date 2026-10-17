@@ -181,27 +181,29 @@ func RunContext(ctx context.Context, o RunOpts) (resultErr error) {
 		return err
 	}
 
-	if !o.NoCache {
-		if appBin, ok := cacheRoot.Lookup(source); ok {
-			if o.Verbose {
-				_, _ = fmt.Fprintf(o.Stderr, "cache: hit %s\n", appBin)
-			}
-			return run(appBin)
-		}
-	}
-
 	entry, err := cacheRoot.BuildContext(ctx, source, gen, o.NoCache, bundle, profile)
 	if err != nil {
 		return fmt.Errorf("emit: %w", err)
 	}
-	if o.NoCache {
-		// Bypass build lives in a temp dir; remove it once the run finishes.
-		defer func() { _ = entry.Remove() }()
-	}
+	defer func() {
+		if err := entry.Close(); err != nil {
+			cleanupErr := fmt.Errorf("close cache entry: %w", err)
+			if resultErr == nil {
+				resultErr = cleanupErr
+			} else {
+				// Keep an ordinary child's status while making cleanup failure visible.
+				_, _ = fmt.Fprintln(runtimeOpts.Stderr, cleanupErr)
+			}
+		}
+	}()
+
 	if o.Verbose {
-		if o.NoCache {
+		switch {
+		case o.NoCache:
 			_, _ = fmt.Fprintln(o.Stderr, "cache: bypass (--no-cache)")
-		} else {
+		case entry.CacheHit:
+			_, _ = fmt.Fprintf(o.Stderr, "cache: hit %s\n", entry.AppPath)
+		default:
 			_, _ = fmt.Fprintf(o.Stderr, "cache: miss, cached %s\n", entry.AppRoot)
 		}
 	}

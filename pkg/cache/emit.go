@@ -2,10 +2,12 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gornkit/gorn/pkg/app"
 	"github.com/gornkit/gorn/pkg/buildprofile"
@@ -13,31 +15,20 @@ import (
 	"github.com/gornkit/gorn/pkg/script"
 )
 
-// Entry records the on-disk paths of a freshly installed cache entry.
-type Entry struct {
-	AppRoot      string
-	MainFilePath string
-	ModFilePath  string
-	AppPath      string
-}
-
-// Build builds the generated app for s and returns its on-disk paths. It builds
-// into a private temp dir. When noCache is false it installs the build into the
-// cache: writing the manifest last and atomically renaming the finished dir
-// into place, so a concurrent or interrupted run never sees a half-built entry.
-// No lock is needed: the app dir is keyed on the content hash (and manifest
-// schema), so concurrent builders produce identical output and the first rename
-// wins; a builder whose rename loses the race yields to the peer's
-// already-published, equivalent entry. When noCache is true it bypasses the
-// cache entirely — no manifest, no publish — and hands the temp build dir back
-// to the caller, who must call [Entry.Remove] after running.
+// Build creates or acquires a leased executable. Close the returned Entry.
+// NoCache builds have only a private stage lease and never acquire a key lock.
 func (r Root) Build(s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle, profile *buildprofile.Profile) (Entry, error) {
 	return r.BuildContext(context.Background(), s, g, noCache, bundle, profile)
 }
 
 // BuildContext cancels resolver/build children and removes unpublished staging.
-func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle, profile *buildprofile.Profile) (Entry, error) {
-	result := Entry{}
+func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generated, noCache bool, bundle *script.HelperBundle, profile *buildprofile.Profile) (result Entry, resultErr error) {
+	defer func() {
+		if resultErr != nil {
+			resultErr = errors.Join(resultErr, result.Close())
+			result = Entry{}
+		}
+	}()
 	if ctx == nil {
 		return result, fmt.Errorf("nil build context")
 	}
@@ -47,34 +38,67 @@ func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generat
 	if profile == nil || s.BuildIdentity() != profile.Identity() {
 		return result, fmt.Errorf("source must be bound to the selected build profile")
 	}
+	var mutation *fileLock
+	if !noCache {
+		if entry, hit, err := r.Acquire(ctx, s); err != nil {
+			return result, err
+		} else if hit {
+			return entry, nil
+		}
+		if err := progress.Phase(ctx, "waiting for cache builder"); err != nil {
+			return result, err
+		}
+		var err error
+		mutation, err = r.keyLock(ctx, s, "mutation", true, true)
+		if err != nil {
+			return result, err
+		}
+		defer func() { resultErr = errors.Join(resultErr, mutation.close()) }()
+		if entry, hit, err := r.Acquire(ctx, s); err != nil {
+			return result, err
+		} else if hit {
+			return entry, nil
+		}
+	}
 	if err := progress.Phase(ctx, "preparing build"); err != nil {
 		return result, err
 	}
 
-	tmpParent := r.TmpDir()
-	if err := os.MkdirAll(tmpParent, 0o700); err != nil {
+	if err := r.ensureDir(r.TmpDir()); err != nil {
 		return result, err
 	}
-	// ponytail: temp and final dirs share the cache root, so os.Rename below
-	// stays on one filesystem (rename across filesystems fails).
-	buildDir, err := os.MkdirTemp(tmpParent, "build-")
+	buildDir, err := os.MkdirTemp(r.TmpDir(), "build-")
 	if err != nil {
 		return result, err
 	}
-	// Clean the temp dir on error. On the cache path a successful publish
-	// renames it away first (so RemoveAll no-ops); on the bypass path we hand it
-	// to the caller and set handoff so it survives.
+	stageID := filepath.Base(buildDir)
+	stageLock, err := r.lock(ctx, "stages", stageID, true, true)
+	if err != nil {
+		_ = os.Remove(buildDir) //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
+		return result, err
+	}
+	owner := ownership{Schema: 1, Layout: manifestSchema, Key: string(s.Key()), Kind: "stage", StageID: stageID, Source: s.Path(), Created: time.Now().UTC().Format(time.RFC3339Nano)}
+	if err := writeOwner(buildDir, owner); err != nil {
+		_ = stageLock.close()
+		_ = os.RemoveAll(buildDir) //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
+		return result, err
+	}
+	identity, err := captureIdentity(buildDir)
+	if err != nil {
+		_ = stageLock.close()
+		return result, err
+	}
 	handoff := false
 	defer func() {
 		if !handoff {
-			_ = os.RemoveAll(buildDir)
+			resultErr = errors.Join(resultErr, removeStage(buildDir, stageID, identity), stageLock.close())
 		}
 	}()
 
-	if err := os.WriteFile(filepath.Join(buildDir, "main.gorn.go"), g.MainGenerated, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(buildDir, "main.gorn.go"), g.MainGenerated, 0o600); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 		return result, err
 	}
-	if err := os.WriteFile(filepath.Join(buildDir, "go.mod"), g.ModGenerated, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(buildDir, "go.mod"), g.ModGenerated, 0o600); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 		return result, err
 	}
 
@@ -107,13 +131,8 @@ func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generat
 		return result, err
 	}
 	if noCache {
-		// Bypass: run straight from the temp dir; caller calls Entry.Remove.
 		handoff = true
-		result.AppRoot = buildDir
-		result.MainFilePath = filepath.Join(buildDir, "main.gorn.go")
-		result.ModFilePath = filepath.Join(buildDir, "go.mod")
-		result.AppPath = filepath.Join(buildDir, "bin", binName)
-		return result, nil
+		return makeEntry(buildDir, stageLock, func() error { return removeStage(buildDir, stageID, identity) }, false), nil
 	}
 
 	binSHA, err := fileSHA256(filepath.Join(buildDir, "bin", binName))
@@ -121,7 +140,12 @@ func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generat
 		return result, err
 	}
 
-	// Manifest last: its presence means the entry is complete and valid.
+	owner.Kind = "entry"
+	owner.BuiltAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if err := writeOwner(buildDir, owner); err != nil {
+		return result, err
+	}
+	// Manifest last: its presence means the candidate is complete.
 	if err := WriteManifest(buildDir, newManifest(s, binSHA, profile.Record())); err != nil {
 		return result, err
 	}
@@ -129,40 +153,97 @@ func (r Root) BuildContext(ctx context.Context, s *app.Source, g *script.Generat
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
-	if err := r.publish(buildDir, s); err != nil {
+	if err := progress.Phase(ctx, "waiting to publish cache entry"); err != nil {
 		return result, err
 	}
-
-	appRoot := r.Dir(s)
-	result.AppRoot = appRoot
-	result.MainFilePath = filepath.Join(appRoot, "main.gorn.go")
-	result.ModFilePath = filepath.Join(appRoot, "go.mod")
-	result.AppPath = r.BinPath(s)
-	return result, nil
+	activity, err := r.keyLock(ctx, s, "activity", true, true)
+	if err != nil {
+		return result, err
+	}
+	if err := r.publish(ctx, buildDir, s); err != nil {
+		_ = activity.close()
+		return result, err
+	}
+	// Never upgrade a shared lock. Release EX and acquire SH while mutation is
+	// still held, so no cooperative mutator can intervene during this downgrade.
+	if err := activity.close(); err != nil {
+		return result, err
+	}
+	activity, err = r.keyLock(ctx, s, "activity", false, true)
+	if err != nil {
+		return result, err
+	}
+	return makeEntry(r.Dir(s), activity, nil, false), nil
 }
 
-// publish atomically installs the finished buildDir as s's cache entry. The
-// rename is the publish point. If it fails but a valid entry for s already
-// exists, a peer published byte-identical content first, so we yield to theirs;
-// any other rename failure is a real install error.
-func (c Root) publish(buildDir string, s *app.Source) error {
-	appRoot := c.Dir(s)
-	if err := os.MkdirAll(filepath.Dir(appRoot), 0o700); err != nil {
+// Acquire validates under a shared activity lease. On a miss the lease is
+// released before any builder waits on mutation, preventing a lock inversion.
+func (r Root) Acquire(ctx context.Context, s *app.Source) (Entry, bool, error) {
+	activity, err := r.keyLock(ctx, s, "activity", false, true)
+	if err != nil {
+		return Entry{}, false, err
+	}
+	if _, hit := r.Lookup(s); hit {
+		if err := ctx.Err(); err != nil {
+			_ = activity.close()
+			return Entry{}, false, err
+		}
+		return makeEntry(r.Dir(s), activity, nil, true), true, nil
+	}
+	return Entry{}, false, activity.close()
+}
+
+func (r Root) keyLock(ctx context.Context, s *app.Source, kind string, exclusive, wait bool) (*fileLock, error) {
+	key := string(s.Key())
+	if !validKey(key) {
+		return nil, errors.New("invalid cache key")
+	}
+	return r.lock(ctx, "entries", key+"."+kind, exclusive, wait)
+}
+
+// publish requires the mutation and exclusive activity locks. Unknown data is
+// never adopted. Keep quarantined invalid data if installing its replacement
+// fails, so publication errors cannot destroy the previous ownership evidence.
+func (r Root) publish(ctx context.Context, buildDir string, s *app.Source) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := os.Rename(buildDir, appRoot); err != nil {
-		if _, ok := c.Lookup(s); !ok {
-			return fmt.Errorf("install cache entry: %w", err)
-		}
+	dest := r.Dir(s)
+	if err := r.ensureDir(filepath.Dir(dest)); err != nil {
+		return err
 	}
-	return nil
-}
-
-// Remove removes the installed cache entry recorded in e. A zero Entry is a
-// no-op.
-func (e Entry) Remove() error {
-	if e.AppRoot == "" {
+	if _, hit := r.Lookup(s); hit {
 		return nil
 	}
-	return os.RemoveAll(e.AppRoot)
+	if _, err := os.Lstat(dest); err == nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
+		if err := r.ownedEntry(s); err != nil {
+			return fmt.Errorf("refuse to replace unrecognized cache entry %s: %w", dest, err)
+		}
+		quarantine := filepath.Join(r.Path(), "quarantine")
+		if err := r.ensureDir(quarantine); err != nil {
+			return err
+		}
+		slot, err := os.MkdirTemp(quarantine, string(s.Key())+"-")
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(slot); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := os.Rename(dest, slot); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
+			return fmt.Errorf("quarantine invalid cache entry: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.Rename(buildDir, dest); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
+		return fmt.Errorf("install cache entry: %w", err)
+	}
+	return nil
 }

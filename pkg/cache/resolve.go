@@ -208,14 +208,14 @@ func (r *resolver) resolve(g *script.Generated, bundle *script.HelperBundle) (*R
 			return result, nil
 		}
 		result.Selected = selected
-		if err := os.WriteFile(filepath.Join(r.dir, "go.mod"), formatted, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(r.dir, "go.mod"), formatted, 0o600); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 			return nil, err
 		}
 	}
 }
 
 func (r *resolver) readModule(floor string) (*modfile.File, []byte, error) {
-	data, err := os.ReadFile(filepath.Join(r.dir, "go.mod"))
+	data, err := os.ReadFile(filepath.Join(r.dir, "go.mod")) //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 	if err != nil {
 		return nil, nil, err
 	}
@@ -234,11 +234,11 @@ func (r *resolver) saveResolution(result *Resolution) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(r.dir, "dependencies.json"), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(r.dir, "dependencies.json"), data, 0o600); err != nil { //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 		return err
 	}
 	// Stdlib-only programs have no checksums, but retain a predictable artifact.
-	f, err := os.OpenFile(filepath.Join(r.dir, "go.sum"), os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(filepath.Join(r.dir, "go.sum"), os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 	if err != nil {
 		return err
 	}

@@ -15,8 +15,6 @@ import (
 	"github.com/gornkit/gorn/pkg/app"
 )
 
-const keyPrefixLength int = 12
-
 var binName = func() string {
 	if runtime.GOOS == "windows" {
 		return "app.exe"
@@ -43,20 +41,9 @@ func (c Root) Path() string { return string(c) }
 // TmpDir returns the directory used for in-progress builds.
 func (c Root) TmpDir() string { return filepath.Join(string(c), "tmp") }
 
-// Dir returns the install directory for s, namespaced by manifest schema so
-// a schema bump lands in a fresh namespace instead of colliding with stale
-// entries. The dir is named on a 12-hex-char (48-bit) prefix of the full key
-// plus the script's Slug for human browsability; the manifest still validates
-// the full key, so a prefix collision never serves the wrong binary. It does,
-// however, wedge the losing script (its build can't publish over the
-// incumbent's dir) — astronomically unlikely, and the fix is to rename the
-// script.
+// Dir returns the full-key directory in the current layout namespace.
 func (c Root) Dir(s *app.Source) string {
-	name := string(s.Key()[:keyPrefixLength])
-	if slug := s.Slug(); slug != "" {
-		name += "-" + slug
-	}
-	return filepath.Join(string(c), "apps", strconv.Itoa(manifestSchema), name)
+	return filepath.Join(string(c), "apps", strconv.Itoa(manifestSchema), string(s.Key()))
 }
 
 // binDir returns the bin subdirectory of s's install directory.
@@ -72,9 +59,16 @@ func (c Root) BinPath(s *app.Source) string {
 // Lookup returns the path to a usable cached binary for s, and true, only
 // when the app dir holds a manifest that parses and matches the full appKey,
 // and the binary is a regular file whose checksum matches the manifest. Any
-// failure is a cache miss, never an error: the caller rebuilds.
+// failure is a cache miss. Lookup is read-only and does not protect lifetime;
+// execution and export callers must use Acquire instead.
 func (c Root) Lookup(s *app.Source) (string, bool) {
+	if !validKey(string(s.Key())) || c.ownedEntry(s) != nil {
+		return "", false
+	}
 	dir := c.Dir(s)
+	if c.checkDir(filepath.Join(dir, "bin")) != nil || !regular(filepath.Join(dir, manifestName)) {
+		return "", false
+	}
 	m, err := LoadManifest(dir)
 	if err != nil {
 		return "", false
@@ -84,7 +78,7 @@ func (c Root) Lookup(s *app.Source) (string, bool) {
 		return "", false
 	}
 	bin := c.BinPath(s)
-	info, err := os.Stat(bin)
+	info, err := os.Lstat(bin) //nolint:gosec // G703: internal cache path, bounded by ownership and plain-directory validation.
 	if err != nil || !info.Mode().IsRegular() {
 		return "", false
 	}

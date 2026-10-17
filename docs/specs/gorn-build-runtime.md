@@ -29,10 +29,10 @@ lazy transitives, MVS upgrades, module cycles, missing direct/graph declarations
 published/bundled helper modes and conflicts, source Go floors, populated offline
 rebuilds, and private-proxy transport diagnostic redaction. Completed builds save
 the effective module/checksums and schema-1 `dependencies.json`. Generation key
-version 4 and manifest schema 2 also bind the delivered profile below.
+version 4 and manifest schema 3 also bind the delivered profile below.
 
 The full local gate passes in the documented private Git/TMPDIR environment.
-Cancellation, progress, and cache ownership remain separate implementation items.
+Cancellation, progress, and cache ownership are delivered below.
 Workspace/toolchain control, readonly builds, and generated VCS/PGO policy are
 applied through the frozen profile.
 
@@ -43,9 +43,9 @@ including warm runs. It fingerprints the installed Go executable, reported
 version/GOROOT/architecture settings, normalized supported flags, source Go floor,
 helper bytes, dependency policy, resolver configuration, and executing CLI bytes.
 Provenance describes the actual compiler, with opaque digests for resolver
-settings and linker values. Manifest schema 2 checks the complete profile
+settings and linker values. Manifest schema 3 checks the complete profile
 fingerprint and host target; generation version 4 excludes older identity.
-Occupied-entry repair/leases remain item 05.
+Occupied-entry repair and leases are implemented under item 05.
 
 [Profile tests](../../pkg/buildprofile/profile_test.go),
 [Go flag grammar tests](../../pkg/buildprofile/flags_test.go), and
@@ -386,19 +386,95 @@ handling of native nonzero exits. Keep status-only results.
 
 ## Cache publication, repair, and management
 
-Use full content/build keys in cache directory names and a new manifest schema
-for the effective profile and dependency provenance. Reject wrong schema, key,
-profile, target, nonregular binary, checksum, and unsupported layout. Missing or
-invalid entries rebuild without exposing partial output.
+**Implemented (05):** cache layout/manifest schema 3 uses
+`apps/3/<full-64-lowercase-hex-key>`; descriptive source names remain metadata.
+The former schema-2 namespace is left untouched and unmanaged. Omitting a slug
+reduces Windows path length and removes the old prefix-collision failure.
+Generation version 4 is unchanged; the CLI digest already identifies generator
+behavior and the new layout prevents reuse of old publications.
 
-Use stable per-entry OS-backed locks outside removable entry directories. Hold
-run/export leases from validated lookup through execution/copy; clean/prune must
-skip active entries. Never unlink a live lock file and create a second namespace.
-Under the mutation lock, revalidate: yield to a valid matching peer; otherwise
-quarantine an invalid owned entry and atomically publish a completed candidate.
-Failed builds preserve valid publications. Handle Windows executable locking as
-an explicit skip/retry/error outcome. Unknown entries and symlinks are diagnosable
-and cannot become deletion authority.
+Validity and ownership are independent. A matching manifest, complete frozen
+profile, host target, regular binary and SHA-256 are required for a hit. An
+`ownership.json` schema-1 record separately binds layout 3, full key, stage ID,
+kind (`stage` or `entry`), creation time and, for completed entries, build time.
+Source is descriptive and confers no authority. Corrupt/missing manifests remain
+repairable only when independent ownership is intact. Missing, corrupt,
+mismatched or unsupported ownership causes an explicit refusal to replace data;
+a key-shaped directory or manifest alone is never deletion authority.
+
+Stable OS-backed locks live outside removable data:
+`locks/entries/<key>.mutation`, `locks/entries/<key>.activity`, and
+`locks/stages/<stage-id>`. Lock files are never unlinked, including after a crash.
+Linux/macOS use nonblocking `flock`; Windows uses nonblocking `LockFileEx` over
+the same one-byte range, with separate noninheritable handles for each lease.
+Only contention is retried, at 20ms intervals with context cancellation and the
+existing progress heartbeat. Unsupported locking/filesystem errors are explicit;
+there is no PID-file fallback.
+
+The lock protocol is part of the contract:
+
+1. A warm lookup acquires shared activity, validates, and returns a leased
+   `Entry`. A miss releases activity before waiting for mutation.
+2. A cold/repair builder acquires exclusive mutation, then rechecks under shared
+   activity. A valid peer wins without another build. A miss releases activity
+   while mutation remains held during compilation in a private stage.
+3. Every stage, including ordinary cached builds, acquires its exclusive stage
+   lock before its ownership record becomes visible. A crash before that record
+   leaves unknown data that automatic maintenance must skip. Completed ownership
+   is written before the validity manifest, which is written last.
+4. Publication acquires exclusive activity while mutation remains held. Existing
+   run/export leases therefore delay replacement. Revalidate: a valid destination
+   wins; an invalid independently owned destination is renamed into quarantine;
+   unknown data is refused. Rename the completed candidate into place.
+5. Release exclusive activity and reacquire shared activity while still holding
+   mutation, then release mutation. Return the shared lease through execution or
+   export. No lock upgrade is assumed. `Entry.Close` releases it.
+6. Maintenance (13) must try mutation first, then exclusive activity without
+   waiting, and skip active entries. A stage cleanup must try its stage lock.
+   No mutator may invert this order or wait on mutation while holding activity.
+
+Failed builds never mutate existing publications. If quarantining succeeds but
+final publication fails, preserve the invalid quarantined data and report the
+error; it remains recoverable, rather than being silently deleted. The final candidate rename is the publication commit point; cancellation is
+checked after lock acquisition and before each mutation. Cancellation racing
+after that rename may leave a valid publication even when acquiring the returned
+lease is canceled. Publication
+provides atomic visibility, not a power-loss/fsync durability guarantee.
+Quarantine management/reporting remains item 13.
+
+`BuildContext` and `Acquire` return leased capabilities. Bare `Lookup` remains a
+read-only validity check and provides no lifetime protection. Copies of an Entry
+share idempotent cleanup state, including the first cleanup error. Changing its
+exported path fields cannot redirect cleanup. `Remove` is an alias for `Close`:
+it removes only private bypass stages, never published entries. Bypass mode
+acquires no entry/key locks and never serves a cache hit, but holds its stage
+lock until execution and cleanup finish.
+
+Stage cleanup checks a directory identity captured through an open handle and
+the stage ID. Capturing through a handle matters on Windows, whose pathname Stat
+can otherwise load identity lazily after a replacement has occurred. It removes
+payload first, retaining ownership until all payload removal succeeds. Windows
+sharing violations therefore leave independently owned residue for later
+maintenance; the lock is released and the cleanup failure is reported. A prior
+child failure keeps its exit status and receives an additional cleanup diagnostic;
+cleanup failure after child success makes the runner fail.
+
+All internal cache directories and ownership/manifest/binary/lock files reject
+symlink substitutions for validation; quarantine moves owned directories without
+traversing linked payloads. Deletion removes symlinks themselves, never targets.
+The operator-selected root may be an alias, including normal platform aliases.
+This protects cooperating Gorn processes and accidental corruption; pathname
+preflights are not an adversarial same-UID sandbox. Stable lock metadata can grow
+with identities/stages; retaining these small files avoids split lock namespaces.
+
+Verification: [cache/ownership tests](../../pkg/cache/ownership_test.go) cover
+shared/exclusive leases, same-process and killed cross-process lock holders,
+serialized real cold builders, cancellable repair while leased, bypass stage
+protection, independent ownership failures, symlinks, quarantine retention,
+private copied-entry cleanup and replacement identity. The
+[Windows cleanup test](../../pkg/cache/cleanup_windows_test.go) requires a real
+sharing violation to preserve ownership and release the stage lock. These tests
+run on all three supported CI hosts; cross-compilation alone is not lock proof.
 
 Cache path reports the resolved Gorn root. Cache list supports stable JSON
 (versioned schema) with identity, source, size, build time, and
@@ -430,9 +506,16 @@ same-directory temporary file using the platform's atomic publication primitive;
 failed builds/publication preserve an existing destination.
 
 Alternatives considered: bare rename handles first publication but not corrupt
-replacement or cleanup races; PID/mkdir locks need a separate abandonment and
-identifier-reuse protocol. OS-backed lifetime locks plus private staging give
-publication, repair, execution, and cleanup one ownership model. Build-time age
+replacement or cleanup races; PID/mkdir locks need abandonment and identifier
+reuse protocols. A single exclusive lock would serialize independent warm runs.
+Shared activity retained while waiting for mutation can deadlock repair, and
+building under shared activity alone permits replacement while another reader is
+active. Separate mutation/activity locks with an explicit leased Entry keep warm
+runs concurrent and make repair wait for readers. Ownership embedded only in the
+validity manifest would make corrupt-manifest repair unsafe. Full keys avoid
+prefix collisions; retaining old layouts avoids an implicit migration/deletion
+policy. OS-backed lifetime locks plus private staging give publication, repair,
+execution, and cleanup one ownership model. Build-time age
 keeps warm cache reads free of recency writes. Explicit `--yes` supports
 noninteractive automation without a blocking confirmation prompt. Refusing
 overwrite by default protects existing output; `--force` provides a deliberate

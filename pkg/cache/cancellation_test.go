@@ -59,6 +59,31 @@ func TestCanceledDependencyDownloadRemovesStaging(t *testing.T) {
 	case <-time.After(8 * time.Second):
 		t.Fatal("dependency download did not start")
 	}
+	// A recognizable live stage is already exclusively protected before
+	// dependency work becomes visible. A canceled contender cannot interrupt it.
+	stages, err := os.ReadDir(root.TmpDir())
+	if err != nil || len(stages) != 1 {
+		t.Fatalf("active stages: %v %v", stages, err)
+	}
+	stageID := stages[0].Name()
+	owner, err := readOwner(filepath.Join(root.TmpDir(), stageID))
+	if err != nil || owner.StageID != stageID {
+		t.Fatalf("stage ownership: %+v %v", owner, err)
+	}
+	if lock, err := root.lock(context.Background(), "stages", stageID, true, false); !errors.Is(err, errLockBusy) {
+		_ = lock.close()
+		t.Fatalf("live stage was not protected: %v", err)
+	}
+	waiter, stopWaiter := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer stopWaiter()
+	if _, err := root.BuildContext(waiter, s, g, false, nil, profile); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("waiter cancellation: %v", err)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("waiter interrupted builder: %v", err)
+	default:
+	}
 	cancel()
 	select {
 	case err := <-done:

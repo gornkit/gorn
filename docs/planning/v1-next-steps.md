@@ -26,13 +26,13 @@ helper modes, pinned-graph resolution, and saved module/checksum provenance.
 GORN-V1-06 binds warm lookup, execution, and provenance to the installed
 toolchain/profile. GORN-V1-08 delivers lifecycle ownership and the core exact-argv
 helper API from 14. GORN-V1-11 delivers immediate phases, bounded diagnostic
-streaming, heartbeats, and quiet behavior. Cache repair/leases (05) are next.**
+streaming, heartbeats, and quiet behavior. GORN-V1-05 delivers cache repair, independent ownership and cancellable leases.
+Binary export/cache management (12–13) are next.**
 
 ## Remaining sequence
 
-1. **Implement the selected build/runtime contracts.** Complete cache repair/leases
-   (05), including cancellation/progress during lock acquisition. Keep profile, resolution,
-   ownership, and provenance consistent before expanding build/cache commands.
+1. **Keep the delivered build/runtime contracts aligned.** Profile, resolution,
+   lifecycle, progress and ownership (05–08, 11) now underpin command workflows.
 2. **Deliver core workflows (12–15).** Implement binary export, cache management,
    exact-argument execution, and supported shell behavior. Keep the `sh` package
    stdlib-only and independent of the CLI dependency graph.

@@ -1,12 +1,14 @@
 package cache
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gornkit/gorn/pkg/app"
 	"github.com/gornkit/gorn/pkg/buildprofile"
@@ -30,6 +32,10 @@ func stageBuild(t *testing.T, dir string, src *app.Source) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(binPath, []byte("bin:"+string(src.Key())), 0o700); err != nil { //nolint:gosec // test fixture
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := writeOwner(dir, ownership{Schema: 1, Layout: manifestSchema, Key: string(src.Key()), Kind: "entry", StageID: "build-fixture", Source: src.Path(), Created: now, BuiltAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	sum, err := fileSHA256(binPath)
@@ -56,10 +62,7 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 }
 
-// TestAppDirNamespacedBySchema guards the change that made the build lock
-// unnecessary: app dirs are namespaced by manifest schema, so a schema bump
-// lands in a fresh namespace instead of forcing a destructive replace of a
-// stale entry.
+// Layout changes use a fresh namespace; complete keys avoid prefix collisions.
 func TestAppDirNamespacedBySchema(t *testing.T) {
 	c := Root(t.TempDir())
 	src := mustSource(t, "app.gorn", "body")
@@ -68,8 +71,8 @@ func TestAppDirNamespacedBySchema(t *testing.T) {
 	if rel, err := filepath.Rel(c.Path(), dir); err != nil || filepath.Dir(rel) != want {
 		t.Fatalf("Dir = %q, want under %q", dir, want)
 	}
-	if !strings.HasSuffix(filepath.Base(dir), "-app") {
-		t.Fatalf("Dir base %q missing slug suffix", filepath.Base(dir))
+	if filepath.Base(dir) != string(src.Key()) {
+		t.Fatalf("Dir base %q is not the full key", filepath.Base(dir))
 	}
 }
 
@@ -93,8 +96,7 @@ func TestCachedBinGate(t *testing.T) {
 	}
 	stageBuild(t, dir, src) // restore a consistent entry
 
-	// Key mismatch → miss (guards the 12-char prefix collision: a different
-	// full key sharing the dir must not be served).
+	// Key mismatch → miss even if someone changes the manifest in place.
 	if err := WriteManifest(dir, newManifest(mustSource(t, "other.gorn", "other"), "x", fixtureProfile())); err != nil {
 		t.Fatal(err)
 	}
@@ -126,16 +128,14 @@ func TestCachedBinMissWhenBinAbsent(t *testing.T) {
 	}
 }
 
-// TestPublish covers the lock-free install: a bare rename is the publish point,
-// and a rename that loses to a peer yields to their identical entry, while any
-// other rename failure surfaces.
+// TestPublish exercises publication under the caller-owned lock protocol.
 func TestPublish(t *testing.T) {
 	t.Run("absent dest installs", func(t *testing.T) {
 		c := Root(t.TempDir())
 		src := mustSource(t, "app.gorn", "body")
 		build := t.TempDir()
 		stageBuild(t, build, src)
-		if err := c.publish(build, src); err != nil {
+		if err := c.publish(context.Background(), build, src); err != nil {
 			t.Fatalf("publish into empty cache: %v", err)
 		}
 		if _, ok := c.Lookup(src); !ok {
@@ -150,7 +150,7 @@ func TestPublish(t *testing.T) {
 
 		build := t.TempDir()
 		stageBuild(t, build, src)
-		if err := c.publish(build, src); err != nil {
+		if err := c.publish(context.Background(), build, src); err != nil {
 			t.Fatalf("losing publisher should yield, got: %v", err)
 		}
 		if _, ok := c.Lookup(src); !ok {
@@ -171,7 +171,7 @@ func TestPublish(t *testing.T) {
 
 		build := t.TempDir()
 		stageBuild(t, build, src)
-		if err := c.publish(build, src); err == nil {
+		if err := c.publish(context.Background(), build, src); err == nil {
 			t.Fatal("publish over occupied non-yielding dir should error")
 		}
 	})
