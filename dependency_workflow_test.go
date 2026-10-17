@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/gornkit/gorn/pkg/cache"
+	"github.com/gornkit/gorn/internal/cache"
 )
 
 func installedModuleProxy(t *testing.T) (*atomic.Int64, *atomic.Bool) {

@@ -30,21 +30,19 @@ streaming, heartbeats, and quiet behavior. GORN-V1-05 delivers cache repair, ind
 GORN-V1-12 delivers standalone binary export. GORN-V1-13 delivers read-only
 inventory and bounded, ownership-aware cache maintenance. GORN-V1-14/15
 stabilize exact arguments and supported shells. GORN-V1-18/19 deliver installed
-workflow coverage and executable onboarding. Compatibility (20), startup
-measurement (22), and releases (21) remain.**
+workflow coverage and executable onboarding. GORN-V1-20 defines compatibility
+and enforces the private implementation boundary. Startup measurement (22) and
+releases (21) remain.**
 
 ## Remaining sequence
 
-1. **Define the compatibility surface (20).** Set the supported public API,
-   implementation-package boundary, Go floor and upgrade/cache transition policy.
-   Enforce the `sh`/CLI dependency invariants in CI.
-2. **Measure startup (22).** Record cold, populated-Go-cache, warm and bypass
+1. **Measure startup (22).** Record cold, populated-Go-cache, warm and bypass
    distributions for plain, preamble and dependency fixtures; select a measured
    reference-host budget and preserve integrity checks.
-3. **Deliver the release candidate (21).** Prepare and verify versioned binaries,
-   checksums, source installation and published helper resolution after 20/22.
-   Required installed workflows and executable onboarding (18–19) are delivered.
-   Optional 16–17 and 23–24 do not hold v1 open.
+2. **Deliver the release candidate (21).** Prepare and verify versioned binaries,
+   checksums, source installation and published helper resolution after 22.
+   Required installed workflows/onboarding (18–19) and compatibility (20) are
+   delivered. Optional 16–17 and 23–24 do not hold v1 open.
 
 Follow item dependencies when refining this sequence. Each slice includes its
 behavioral tests and affected documentation. Preserve archived documents.
@@ -73,7 +71,7 @@ approvals separate from implementation completion.
 
 Establish the baseline before changing code. Run focused behavioral checks first,
 then `mise run test` for lint, stamped build, and uncached tests. Verify both
-dependency invariants: `sh` is stdlib-only, and the root/`pkg/` graph excludes
+dependency invariants: `sh` is stdlib-only, and the root/`internal/` graph excludes
 `sh`. Report environmental failures separately from regressions.
 
 The [format implementation record](v1-standard-main-plan.md) documents a Linux

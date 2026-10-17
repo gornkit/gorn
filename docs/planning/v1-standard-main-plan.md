@@ -55,7 +55,7 @@ Verification recorded on 2026-10-17 used Linux and mise-pinned Go 1.26.4.
 Focused checks covered the parser, generator, key, and CLI packages:
 
 ```sh
-mise exec -- go test -count=1 ./pkg/script ./pkg/app .
+mise exec -- go test -count=1 ./internal/script ./internal/app .
 ```
 
 Coverage includes valid/invalid entry points, lexical directive handling,
@@ -73,7 +73,7 @@ and removed afterward; no global Go or Git setting changes are needed.
 
 The full `mise run test` gate passed with that isolated TMPDIR: lint reported
 zero issues, the stamped CLI built, and all package tests passed. Dependency-graph
-checks using `go list -deps -json` verified stdlib-only `sh` and no root/`pkg/`
+checks using `go list -deps -json` verified stdlib-only `sh` and no root/`internal/`
 dependency on `sh`. Documentation links/frontmatter and `git diff --check` passed.
 The `testdata/require.gorn` example also built and ran with the local module
 replacement used for preamble verification, printing `hello, Gorn`.

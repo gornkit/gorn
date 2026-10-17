@@ -21,9 +21,9 @@ identity, dependency resolution, and process ownership.
 ## Delivered dependency policy
 
 GORN-V1-07 implements the dependency/helper policy below. Evidence includes
-[bundle identity/materialization tests](../../pkg/script/bundle_test.go),
+[bundle identity/materialization tests](../../internal/script/bundle_test.go),
 [maintained-source embedding checks](../../helper_embed_test.go),
-[real file-proxy graph tests](../../pkg/cache/resolve_test.go), and
+[real file-proxy graph tests](../../internal/cache/resolve_test.go), and
 [installed-CLI offline runs](../../dependency_integration_test.go). These cover
 lazy transitives, MVS upgrades, module cycles, missing direct/graph declarations,
 published/bundled helper modes and conflicts, source Go floors, populated offline
@@ -47,13 +47,13 @@ settings and linker values. Manifest schema 3 checks the complete profile
 fingerprint and host target; generation version 4 excludes older identity.
 Occupied-entry repair and leases are implemented under item 05.
 
-[Profile tests](../../pkg/buildprofile/profile_test.go),
-[Go flag grammar tests](../../pkg/buildprofile/flags_test.go), and
+[Profile tests](../../internal/buildprofile/profile_test.go),
+[Go flag grammar tests](../../internal/buildprofile/flags_test.go), and
 [installed-CLI behavior](../../profile_integration_test.go) cover frozen GOENV,
 SDK/user/process precedence, normalized flag reuse, private linker values,
 same-version generator changes, selected compiler-path changes, foreign targets,
 unsupported inputs on warm runs, and real versus literal embed directives.
-[Manifest regressions](../../pkg/cache/cache_test.go) reject changed schemas,
+[Manifest regressions](../../internal/cache/cache_test.go) reject changed schemas,
 profile contents, identities, and targets. The full local gate passes with the
 documented Git/TMPDIR isolation and normal project VCS stamping.
 
@@ -199,7 +199,8 @@ identifiers. Ordinary script arguments and runtime environment are excluded.
 
 The initial profile is deliberately bounded:
 
-- Use installed Go with `GOTOOLCHAIN=local`; enforce the source and dependency Go
+- Require installed Go 1.26.4 or newer before profile/lookup, including warm runs.
+  Use `GOTOOLCHAIN=local`; enforce the source and dependency Go
   minimums. A newer installed compiler does not authorize raising the declared
   source language floor to satisfy a dependency. The bundled child module uses
   the minimum Go language version its source needs; CLI toolchain patch minimums
@@ -248,12 +249,12 @@ signal handling is separate from embedding APIs; those APIs install no global
 handlers. The exact-argument `sh.Cmd` entry point shares the same process path.
 Shell startup/Strict behavior remains item 15.
 
-Evidence: [process and real PTY tests](../../pkg/process/process_posix_test.go),
-[concurrent waits and deadlines](../../pkg/process/process_test.go),
-[Windows tree/fallback tests](../../pkg/process/process_windows_test.go),
-[stalled launcher](../../pkg/buildprofile/context_test.go),
-[stalled dependency download/staging cleanup](../../pkg/cache/cancellation_test.go),
-[source-reader ownership](../../pkg/cli/input_test.go),
+Evidence: [process and real PTY tests](../../internal/process/process_posix_test.go),
+[concurrent waits and deadlines](../../internal/process/process_test.go),
+[Windows tree/fallback tests](../../internal/process/process_windows_test.go),
+[stalled launcher](../../internal/buildprofile/context_test.go),
+[stalled dependency download/staging cleanup](../../internal/cache/cancellation_test.go),
+[source-reader ownership](../../internal/cli/input_test.go),
 [installed nested-helper and input cancellation](../../lifecycle_integration_posix_test.go),
 and [exact argv/IO/configuration tests](../../sh/command_test.go).
 
@@ -467,12 +468,12 @@ This protects cooperating Gorn processes and accidental corruption; pathname
 preflights are not an adversarial same-UID sandbox. Stable lock metadata can grow
 with identities/stages; retaining these small files avoids split lock namespaces.
 
-Verification: [cache/ownership tests](../../pkg/cache/ownership_test.go) cover
+Verification: [cache/ownership tests](../../internal/cache/ownership_test.go) cover
 shared/exclusive leases, same-process and killed cross-process lock holders,
 serialized real cold builders, cancellable repair while leased, bypass stage
 protection, independent ownership failures, symlinks, quarantine retention,
 private copied-entry cleanup and replacement identity. The
-[Windows cleanup test](../../pkg/cache/cleanup_windows_test.go) requires a real
+[Windows cleanup test](../../internal/cache/cleanup_windows_test.go) requires a real
 sharing violation to preserve ownership and release the stage lock. These tests
 run on all three supported CI hosts; cross-compilation alone is not lock proof.
 
@@ -561,10 +562,10 @@ run indefinitely with concurrent writers; bounded selection plus a final unmet
 report gives a finite command. Automatic background eviction, old-layout
 adoption and usage-recency tracking remain outside v1.
 
-Verification: [inventory tests](../../pkg/cache/inventory_test.go),
-[maintenance tests](../../pkg/cache/maintain_test.go),
-[Windows sharing-failure tests](../../pkg/cache/maintain_windows_test.go),
-[CLI contract tests](../../pkg/cli/cachecmd_test.go), and
+Verification: [inventory tests](../../internal/cache/inventory_test.go),
+[maintenance tests](../../internal/cache/maintain_test.go),
+[Windows sharing-failure tests](../../internal/cache/maintain_windows_test.go),
+[CLI contract tests](../../internal/cli/cachecmd_test.go), and
 [installed no-Go/active-run tests](../../cache_integration_test.go) cover these
 contracts. Native Windows CI is required evidence for sharing violations and
 ownership restoration; cross-compilation alone is insufficient.
@@ -599,7 +600,7 @@ regular-file replacement policy.
 **Implemented (12):** `gorn build <script> -o <path>` uses the same source parser,
 generator, frozen build profile, dependency resolver, ownership checks and leased
 cache entry as run. It never starts the script: neither `init` nor `main` runs.
-The core path is shared in [preparation](../../pkg/cli/prepare.go), with inspection
+The core path is shared in [preparation](../../internal/cli/prepare.go), with inspection
 still returning before any toolchain/cache work. `--no-cache` builds and removes a
 private leased stage; ordinary cold/warm exports share the same cache as run.
 
@@ -655,7 +656,7 @@ that can move/remove the incumbent, so the selected native rename operation is
 preferable. Explicit output naming and overwrite intent make shell automation
 predictable; automatically creating parent trees would hide path mistakes.
 
-Evidence: [export policy/concurrency tests](../../pkg/cli/export_test.go) and
+Evidence: [export policy/concurrency tests](../../internal/cli/export_test.go) and
 [installed build tests](../../build_integration_test.go) cover cold/warm/bypass,
 stdin, compiler and overwrite failures, source aliases, native naming/modes,
 concurrent no-replace publication, cancellation, no execution at build time, and
@@ -677,15 +678,15 @@ start reporting. Missing Go, source, dependency, compiler, and script failures k
 their phase/cause; internal generated-source dumps require `--verbose`, while
 `--print-main` remains the explicit inspect-only artifact path.
 
-[Reporter tests](../../pkg/progress/progress_test.go) cover synchronous initial
+[Reporter tests](../../internal/progress/progress_test.go) cover synchronous initial
 output, heartbeat/quiet behavior, joined shutdown, synchronized writers, IO
 failure cancellation, complete-line framing, EOF, and oversized diagnostics.
-[Resolver streaming tests](../../pkg/cache/progress_test.go) prove redacted
+[Resolver streaming tests](../../internal/cache/progress_test.go) prove redacted
 diagnostics appear before a still-running child exits and are not replayed in
 its final error. [Installed CLI tests](../../progress_integration_test.go) cover
 cold/warm/bypass phases, quiet aliases, compiler failures, blocked-source
 heartbeats, slow dependency failures/redaction, stdout integrity, and runtime
-handoff. [Background stdin compatibility](../../pkg/cli/runcmd_test.go) keeps
+handoff. [Background stdin compatibility](../../internal/cli/runcmd_test.go) keeps
 uncancellable embedding reads from acquiring a new ownership requirement merely
 because reporting uses an internal cancellation context.
 

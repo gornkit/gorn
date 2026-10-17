@@ -40,7 +40,7 @@ func TestPrivateProcessPrimitivesMatch(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		runner, err := os.ReadFile("pkg/process/" + name)
+		runner, err := os.ReadFile("internal/process/" + name)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -220,12 +220,12 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** compatibility surface (20),
+**Next implementation slice:** startup measurement (22),
 following the selected [build/runtime contract](../specs/gorn-build-runtime.md).
 Inspection (01), source format (02–03, 25), execution/source identity (04, 09),
 cache ownership/repair (05), profile (06), dependency/helper delivery (07),
 lifecycle (08), metadata validation (10), progress (11), binary export (12), and cache management (13), shell/exact-argv stabilization (14–15), installed workflows
-(18), and onboarding (19) are implemented.
+(18), onboarding (19), and the compatibility surface (20) are implemented.
 Follow the [delivery workflow](v1-next-steps.md) for bounded implementation and
 validation.
 
@@ -238,8 +238,8 @@ opening or looking up the cache. The previous warm-cache path could execute user
 code before checking print flags. Artifact and header write failures, including
 short writes, now propagate.
 
-Evidence: [run dispatch](../../pkg/cli/runcmd.go),
-[write-error tests](../../pkg/cli/runcmd_test.go), and
+Evidence: [run dispatch](../../internal/cli/runcmd.go),
+[write-error tests](../../internal/cli/runcmd_test.go), and
 [cache-state inspection tests](../../run_integration_test.go). The regressions
 failed on the unchanged runner and passed after the fix. The full `mise run test`
 gate passed on Linux using the documented valid Git fixture as TMPDIR, with
@@ -259,8 +259,8 @@ wrapper altered multiline raw-string values by indenting every body line. The
 wrapper and indentation helper are removed. Generation now preserves source
 text and uses source anchors around inserted preamble code.
 
-Evidence: [generation](../../pkg/script/generator.go) and its
-[compile/run and diagnostic tests](../../pkg/script/generator_test.go).
+Evidence: [generation](../../internal/script/generator.go) and its
+[compile/run and diagnostic tests](../../internal/script/generator_test.go).
 Acceptance covers raw strings, blank lines, attached comments, CRLF, original
 formatting, and equivalence with ordinary Go, including original source locations.
 
@@ -273,8 +273,8 @@ line-based parser mistook directive-looking literal/comment contents for metadat
 The parser now uses actual Go comment tokens and accepts standalone metadata only
 in the header before the package clause.
 
-Evidence: [parser](../../pkg/script/parser.go) and its
-[lexical/position regressions](../../pkg/script/parser_test.go). Tests cover raw
+Evidence: [parser](../../internal/script/parser.go) and its
+[lexical/position regressions](../../internal/script/parser_test.go). Tests cover raw
 strings, block comments, trailing comments, placement, cardinality, and physical
 source lines, without a second Go grammar.
 
@@ -289,7 +289,7 @@ without an added runner error line. Explicit and shorthand forms share help,
 version, separator, and verbose-flag behavior.
 
 The [execution/source identity decisions](v1-execution-plan.md) record alternatives,
-trade-offs, rationale, and verification. Evidence: [status mapping](../../pkg/cli/status.go),
+trade-offs, rationale, and verification. Evidence: [status mapping](../../internal/cli/status.go),
 [CLI entry](../../main.go), and [installed-CLI tests](../../execution_integration_test.go).
 
 Acceptance: successful scripts exit `0`; ordinary child failures preserve their
@@ -313,10 +313,10 @@ share idempotent private cleanup; payload-first deletion preserves ownership aft
 Windows sharing violations. Prior schema-2 entries remain untouched.
 
 Evidence: [selected protocol, alternatives and boundaries](../specs/gorn-build-runtime.md#cache-publication-repair-and-management),
-[publication/acquisition](../../pkg/cache/emit.go),
-[ownership/cleanup](../../pkg/cache/ownership.go),
-[behavioral tests](../../pkg/cache/ownership_test.go), and
-[Windows sharing-violation test](../../pkg/cache/cleanup_windows_test.go).
+[publication/acquisition](../../internal/cache/emit.go),
+[ownership/cleanup](../../internal/cache/ownership.go),
+[behavioral tests](../../internal/cache/ownership_test.go), and
+[Windows sharing-violation test](../../internal/cache/cleanup_windows_test.go).
 Focused tests cover real two-process cold builds with exactly one compilation,
 coexisting readers, killed-holder lock release, canceled publication waits,
 corrupt/missing manifest and payload/profile/target repair, unknown records,
@@ -344,10 +344,10 @@ old identity.
 
 The [build/runtime contract](../specs/gorn-build-runtime.md) records alternatives,
 rationale, and installed-input trust assumptions. Evidence:
-[profile tests](../../pkg/buildprofile/profile_test.go),
-[flag grammar](../../pkg/buildprofile/flags_test.go),
+[profile tests](../../internal/buildprofile/profile_test.go),
+[flag grammar](../../internal/buildprofile/flags_test.go),
 [installed-CLI regressions](../../profile_integration_test.go), and
-[manifest gates](../../pkg/cache/cache_test.go).
+[manifest gates](../../internal/cache/cache_test.go).
 
 Acceptance: define supported inputs once and use them for execution, identity,
 and provenance: generator identity, dependency identity, actual selected Go
@@ -374,8 +374,8 @@ tidy/get/latest discovery or silently raising the source Go minimum. Effective
 module/checksums, original declarations, selected versions, and helper identity
 are saved. No companion lock artifact is required. The [build/runtime design](../specs/gorn-build-runtime.md)
 records alternatives, trade-offs, reproducibility limits, and the supported GOFLAGS
-allowlist delivered under item 06. Evidence: [resolver and file-proxy regressions](../../pkg/cache/resolve_test.go),
-[bundle tests](../../pkg/script/bundle_test.go), and
+allowlist delivered under item 06. Evidence: [resolver and file-proxy regressions](../../internal/cache/resolve_test.go),
+[bundle tests](../../internal/script/bundle_test.go), and
 [installed-CLI offline cold/warm/bypass tests](../../dependency_integration_test.go).
 Private-proxy transport failures verify URL credential/query redaction. Actual
 toolchain/generator identity is delivered under 06; lifecycle remains 08.
@@ -426,8 +426,8 @@ unusable explicit roots return their path and cause without fallback. Runtime
 cwd is preserved, and source stdin is consumed before runtime begins.
 
 See [decisions and verification](v1-execution-plan.md). Evidence:
-[source tests](../../pkg/app/source_test.go),
-[cache-location tests](../../pkg/cache/cache_test.go), and
+[source tests](../../internal/app/source_test.go),
+[cache-location tests](../../internal/cache/cache_test.go), and
 [installed-CLI tests](../../execution_integration_test.go).
 
 Acceptance: choose absolute source identity, a documented symlink policy, and a
@@ -449,10 +449,10 @@ preserved. Go module validation uses the justified CLI-only `golang.org/x/mod`
 dependency; `sh` remains stdlib-only.
 
 The [build/runtime contract](../specs/gorn-build-runtime.md) records the selected
-policy and alternatives. Evidence: [metadata regressions](../../pkg/script/metadata_test.go)
+policy and alternatives. Evidence: [metadata regressions](../../internal/script/metadata_test.go)
 cover syntax, cardinality, original physical lines, underlying validation causes,
 and operation without Go. Dependency resolution/helper delivery are recorded in item 07.
-Evidence: [directive handling](../../pkg/script/parser.go) and
+Evidence: [directive handling](../../internal/script/parser.go) and
 [format contract](../specs/gorn-script-format.md).
 
 Acceptance: reject repeated preamble directives; define duplicate/conflicting
@@ -501,7 +501,7 @@ provides Unix execution, and Windows inherits destination-directory ACLs.
 [The selected export contract](../specs/gorn-build-runtime.md#standalone-binary-export)
 records alternatives, filesystem/native-runtime assumptions, cancellation,
 commit-point semantics, permission and naming decisions. Evidence includes
-[unit policy and concurrent publication tests](../../pkg/cli/export_test.go) and
+[unit policy and concurrent publication tests](../../internal/cli/export_test.go) and
 [installed-CLI cold/warm/bypass, standalone and bundled-helper tests](../../build_integration_test.go).
 Inspection still returns before the extracted build preparation path. Public
 help advertises implemented build flags; cross-compilation remains outside v1.
@@ -528,10 +528,10 @@ ownership for later retry.
 records alternatives, trade-offs and rationale for deterministic root selection,
 logical bytes, build age, explicit mutation, preview limits, ownership authority,
 nonblocking cleanup and bounded concurrent maintenance. Evidence includes
-[inventory](../../pkg/cache/inventory_test.go),
-[maintenance](../../pkg/cache/maintain_test.go),
-[Windows deletion failures](../../pkg/cache/maintain_windows_test.go),
-[CLI contracts](../../pkg/cli/cachecmd_test.go), and
+[inventory](../../internal/cache/inventory_test.go),
+[maintenance](../../internal/cache/maintain_test.go),
+[Windows deletion failures](../../internal/cache/maintain_windows_test.go),
+[CLI contracts](../../internal/cli/cachecmd_test.go), and
 [installed no-Go/active-run tests](../../cache_integration_test.go).
 Independent destructive-path review found and corrected unreadable-namespace
 membership accounting: hidden owned bytes cannot appear as a satisfied zero-byte
@@ -657,7 +657,7 @@ and deterministic tests versus published release smoke.
 through the built CLI. Tests also exercise bypass, inspection, JSON cache preview,
 export, no-Go standalone execution and a real Unix shebang. All complete Go blocks
 in README and the format specification compile in
-[documentation tests](../../pkg/script/generator_test.go).
+[documentation tests](../../internal/script/generator_test.go).
 Current format, runner/cache, workflow and helper contracts live outside the
 frozen archive. Versioned distribution and source-install version reporting
 remain in 21; supporting implementation packages and API policy remain in 20.
@@ -666,16 +666,28 @@ remain in 21; supporting implementation packages and API policy remain in 20.
 
 **P1 · Architecture · M · Depends: 07, 10, 14–15, 25 decision**
 
-Choose what v1 promises to keep stable: script directives and preamble names,
-CLI flags/output/status, public `sh`, and cache format transitions. The `pkg/`
-tree is described as internal but Go permits imports of those package paths.
+**Status: implemented.** [The compatibility spec](../specs/gorn-compatibility.md)
+selects source/metadata/preamble, documented CLI behavior, schema-1 cache JSON,
+standalone export and public `sh` as the v1 surface. Implementation packages move
+from `pkg/` behind Go's enforced `internal/` boundary without pre-v1 forwarding
+packages. Supported human diagnostic meaning/streams/status remain distinct from
+unstable wording/layout; raw cache formats and implementation structs stay private.
+The spec records alternatives, trade-offs, deprecation/upgrade policy and identity
+invalidation for generator/helper/profile changes.
 
-Acceptance: either move implementation packages behind `internal/` before v1
-or explicitly support the intended public API; resolve the naming ambiguity.
-Document the supported Go floor and upgrade/deprecation policy. Changes to
-generator/preamble/helper behavior invalidate affected cached builds. Enforce
-the two package dependency invariants with a meaningful dependency-graph check:
-stdlib-only `sh`, and no root/CLI import of `sh`.
+The installed compiler floor now enforces the existing module/install minimum
+Go 1.26.4 before identity/cache lookup. Script/bundled language defaults remain
+1.26; source minima are never silently raised for dependencies. Tests exercise
+an older-reporting Go launcher and keep the compiler floor aligned with go.mod.
+The [real dependency-graph check](../../dependency_boundary_test.go) enforces
+stdlib-only `sh` and no root/internal graph import of `sh`. Maintained imports,
+links, layout instructions and mirrored-process comments move together; archived
+documents stay frozen. Existing CLI/helper digests invalidate affected cached
+identities without adopting old layouts. Default `mise run test`, focused race
+checks, Windows/macOS target lint, dependency-graph/embedding/mirror checks and
+documentation checks pass. Independent P0 review verified every moved production
+file after import/comment normalization and found only the intended floor check
+as a behavior change. Native three-platform CI remains the landing gate.
 
 ### GORN-V1-21 — Deliver and smoke-test versioned releases
 

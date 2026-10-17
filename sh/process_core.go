@@ -1,6 +1,6 @@
 package sh
 
-// This private primitive is duplicated in pkg/process to keep sh self-contained
+// This private primitive is duplicated in internal/process to keep sh self-contained
 // and the CLI independent of sh. The root consistency test guards against drift.
 
 import (
