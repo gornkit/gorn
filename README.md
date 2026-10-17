@@ -31,11 +31,14 @@ sh.Bash().
 	OrExit()
 ```
 
-It is shell-first, not a portable shell replacement. Structured commands,
-globbing, and file helpers are future work.
+Use `sh.Cmd(name, args...)` for exact executable arguments and `.Shell(script)`
+when shell syntax is needed. Globbing and file helpers remain outside v1. See the
+[helper contract](docs/specs/gorn-sh.md) for supported shells, startup, strictness,
+setup ordering, IO and process results.
 
 ## Design
 
+- [`docs/specs/gorn-sh.md`](docs/specs/gorn-sh.md) — exact arguments and supported shell behavior.
 - [`docs/specs/gorn-script-format.md`](docs/specs/gorn-script-format.md) — the `.gorn` script format, as currently implemented (authoritative).
 - [`docs/planning/v1-backlog.md`](docs/planning/v1-backlog.md) — current-state assessment and proposed v1 backlog (draft).
 - [`docs/archive/GORN_DESIGN.md`](docs/archive/GORN_DESIGN.md) — overall design and non-goals (historical/reference).
@@ -102,6 +105,8 @@ documents IO ownership, timing, supported architectures, and platform limits.
 `sh.Cmd(name, args...)` runs exact arguments without shell interpretation.
 `sh.Bash().Shell(script)` retains shell syntax. Both support immutable
 `.Dir`, `.Env`, `.Stdin`, `.Stdout`, `.Stderr`, and `.Context(ctx)` configuration.
+Shells use non-login automation defaults; `NewShell` can opt into profiles.
+`Strict` follows shell-specific rules, including PowerShell native-command limits.
 Start returns a process with repeatable/concurrent Wait and idempotent Kill;
 cancellation errors support `errors.Is` with context cancellation/deadline errors.
 

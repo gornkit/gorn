@@ -4,6 +4,15 @@
 // Environment and unspecified IO inherit from the process; caller IO is never
 // closed. Context(nil) is invalid, while an unspecified context is Background.
 //
+// Bash is non-login (-c), Zsh skips personal startup (-fc), Sh uses -c, Cmd
+// disables AutoRun (/D /S /C), and Pwsh skips profiles and prompts. Bash still
+// honors inherited BASH_ENV; Zsh may read global zshenv. NewShell selects custom
+// startup arguments. Setup runs in call order before each script. Cmd setup joins
+// fragments with &, retaining command-string expansion rules instead of batch
+// line semantics. Strict uses native shell options: PowerShell's error preference
+// does not make every nonzero native command abort. Use Cmd for exact arguments
+// or handle shell-specific statuses explicitly.
+//
 // A started Process has one automatic reaper. Concurrent/repeated Wait returns
 // the same result. Kill requests termination and is idempotent; Wait observes
 // cleanup. Context cancellation preserves errors.Is with context.Canceled or
