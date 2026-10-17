@@ -5,27 +5,31 @@
 **Go file apps you can run right now.** Write one Go main file, run it with
 arguments and normal IO, then rerun its cached executable or export a binary.
 
-Gorn is preparing for v1. The current development build supports `run`, `build`
-and explicit cache management. Scripts use `package main` and `func main()`;
+Gorn v1 supports `run`, `build` and explicit cache management. Scripts use `package main` and `func main()`;
 `.gorn` remains the filename convention.
 
 ## Install
 
-Install Go **1.26.4 or newer**, with `go` on PATH, then install the development
-build:
+Install Go **1.26.4 or newer**, with `go` on PATH, then install a fixed
+release:
 
 ```sh
-go install github.com/gornkit/gorn@main
+go install github.com/gornkit/gorn@v1.0.0
 gorn --version
 ```
 
 Put Go's binary directory on PATH: `go env GOBIN` if set, otherwise the `bin`
 directory under `go env GOPATH`. These Go commands work in Unix shells and
-PowerShell. `@main` follows development and can change; an approved versioned
-release will provide a fixed install target. Source installs report Go's selected
-module version; explicit release stamps take precedence. Downloading Go modules
-normally needs network access on first install. The [release contract](docs/specs/gorn-release.md)
-defines binary targets, checksum verification and candidate promotion.
+PowerShell. Source installs report the selected module version. For development,
+use `@main`; the validated candidate is `@v1.0.0-rc.1`. Downloading Go modules
+normally needs network access on first install.
+
+You can also download a matching archive from [GitHub Releases](https://github.com/gornkit/gorn/releases),
+verify it against SHA256SUMS.txt, extract, and put `gorn`/`gorn.exe` on PATH.
+Use `sha256sum` or `shasum -a 256` on Unix, or `Get-FileHash -Algorithm SHA256`
+in PowerShell. The [release contract](docs/specs/gorn-release.md) identifies
+supported targets and native coverage; [release notes](docs/releases/v1.0.0.md)
+cover upgrades from development versions.
 
 The runner needs installed Go on every run, including warm hits, to validate its
 build profile. An exported executable needs neither Go nor Gorn, but still needs

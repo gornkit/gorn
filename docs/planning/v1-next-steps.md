@@ -32,15 +32,18 @@ inventory and bounded, ownership-aware cache maintenance. GORN-V1-14/15
 stabilize exact arguments and supported shells. GORN-V1-18/19 deliver installed
 workflow coverage and executable onboarding. GORN-V1-20 defines compatibility
 and enforces the private implementation boundary. GORN-V1-22 records startup
-distributions and a measured reference-host budget. Releases (21) remain.**
+distributions and a measured reference-host budget. GORN-V1-21 delivers release
+tooling and a native/public-module-qualified `v1.0.0-rc.1`; stable publication
+remains.**
 
 ## Remaining sequence
 
-1. **Deliver the release candidate (21).** The [release contract](../specs/gorn-release.md)
+1. **Publish the stable release (21).** The [release contract](../specs/gorn-release.md)
    records selected targets, alternatives, trade-offs, candidate/final ordering
-   and recovery. Prepare and verify versioned binaries,
-   checksums, source installation and published helper resolution. Recheck the
-   candidate against the measured startup budget. Installed workflows/onboarding
+   and recovery. The published candidate passes all three native public-module/
+   archive smokes and the reference startup budget. Record candidate evidence
+   and stable install guidance, then repeat the pipeline for `v1.0.0`; Latest
+   promotion requires successful final native checks. Installed workflows/onboarding
    (18–19), compatibility (20) and startup measurement (22) are delivered.
    Optional 16–17 and 23–24 are deliberately deferred and do not hold v1 open.
 
