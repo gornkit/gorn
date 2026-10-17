@@ -20,8 +20,8 @@ API**. Add exact-argument process execution to that API. Keep the file format
 small and use ordinary Go modules and standard library IO. Fragments, a pipeline
 DSL, a filesystem utility suite, and a full language server can wait.
 
-GORN-V1-25 and the related source-preservation and directive fixes in 02–03
-are implemented, with linked verification evidence. Other items remain proposed
+GORN-V1-01, GORN-V1-25, and the related source-preservation and directive fixes
+in 02–03 are implemented, with linked verification evidence. Other items remain proposed
 unless their status records implementation. The backlog defines scope and
 acceptance criteria; it does not authorize implementation or publication.
 
@@ -220,17 +220,25 @@ when concrete failures justify it. These choices follow the general approach in
 OpenAI's [model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection)
 and [reasoning-effort guidance](https://developers.openai.com/api/docs/guides/deployment-checklist).
 
-**Next implementation slice:** inspection safety (01). Source-format work in 25
-and the related 02–03 fixes is complete. Follow the
+**Next implementation slice:** execution correctness (04, 09). Inspection safety
+(01), source-format work in 25, and the related 02–03 fixes are complete. Follow the
 [delivery workflow](v1-next-steps.md) for bounded implementation and validation.
 
 ### GORN-V1-01 — Make inspection incapable of executing a script
 
 **P0 · Fix · S · Depends: none**
 
-On a warm cache, `Run` returns through `execCmd` before checking `--print-mod`
-or `--print-main`. An inspection command therefore runs user code.
-Evidence: [run dispatch](../../pkg/cli/runcmd.go), lookup before the print branch.
+**Status: implemented.** Inspection returns after parsing and generation, before
+opening or looking up the cache. The previous warm-cache path could execute user
+code before checking print flags. Artifact and header write failures, including
+short writes, now propagate.
+
+Evidence: [run dispatch](../../pkg/cli/runcmd.go),
+[write-error tests](../../pkg/cli/runcmd_test.go), and
+[cache-state inspection tests](../../run_integration_test.go). The regressions
+failed on the unchanged runner and passed after the fix. The full `mise run test`
+gate passed on Linux using the documented valid Git fixture as TMPDIR, with
+normal VCS stamping. Independent P0 review found no actionable issues.
 
 Acceptance: both flags, separately and together, emit only the requested
 artifacts on cold, warm, bypass, and corrupt caches. A side-effect fixture proves
@@ -498,7 +506,9 @@ assets and any provenance files. Multi-file includes are unnecessary.
 **P1 · Validation · L · Depends: start now; complete after 01–15**
 
 GORN-V1-25 adds real CLI cold/warm/bypass execution, stdin, arguments, IO,
-and cold inspection coverage. Generator tests compile plain, preamble, and
+and cold inspection coverage. GORN-V1-01 extends inspection coverage across
+warm, bypass, and corrupt caches, missing Go, unusable cache paths, and output
+failures. Generator tests compile plain, preamble, and
 documentation examples using a local module replacement where needed.
 Installed-CLI and cross-platform coverage of the remaining workflows is still
 required. Evidence: [execution tests](../../run_integration_test.go),

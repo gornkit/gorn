@@ -205,12 +205,13 @@ the manifest schema is unchanged.
 `gorn run <script>` and `gorn <script>` parse, generate, build, cache, and execute
 a script with forwarded arguments. stdin source uses `-`. `--no-cache` builds
 fresh without publishing the result. `--print-main` and `--print-mod` expose the
-generated artifacts; both together add artifact headers.
+generated artifacts; both together add artifact headers. Inspection validates the
+source and generates the requested artifacts without opening the build cache,
+invoking Go, or executing the script. It works independently of cache contents
+and writability; failed or short output writes return errors.
 
-Known independent runner issue: on a warm cache, print flags can execute the
-cached script instead of inspecting it. Use `--no-cache` with inspection until
-GORN-V1-01 is fixed. Exit status, cancellation, cache repair, and broader build
-identity improvements are tracked separately in the [v1 backlog](../planning/v1-backlog.md).
+Exit status, cancellation, cache repair, and broader build identity improvements
+are tracked separately in the [v1 backlog](../planning/v1-backlog.md).
 `gorn build` and `gorn cache` remain stubs; check, format, and eject commands are
 not implemented.
 
